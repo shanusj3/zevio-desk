@@ -1,0 +1,439 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  MANAGER
+  ADVISOR
+  TECHNICIAN
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum TenantStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+}
+
+enum TicketStatus {
+  RECEIVED
+  DIAGNOSING
+  WAITING_FOR_PARTS
+  IN_PROGRESS
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketPriority {
+  NORMAL
+  URGENT
+  WARRANTY
+}
+
+enum CustomerType {
+  WALK_IN
+  RETURNING
+  BUSINESS
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum PaymentType {
+  ADVANCE
+  PARTS
+  PARTIAL
+  FINAL
+  REFUND
+}
+
+model Tenant {
+  id             String       @id @default(uuid())
+  name           String
+  slug           String       @unique
+  plan           String       @default("FREE")
+  status         TenantStatus @default(ACTIVE)
+  description    String?
+  businessEmail  String?
+  phone          String?
+  address        String?
+  gstNumber      String?
+  primaryColor   String?      @default("#7C3AED")
+  secondaryColor String?      @default("#F59E0B")
+  adminName      String?
+  adminEmail     String?
+  adminPhone     String?
+  monthlyRevenue Decimal?
+  logoUrl        String?
+  defaultInvoiceDetailLevel String @default("STANDARD") // "MINIMAL" | "STANDARD" | "DETAILED"
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users          User[]
+  tickets        Ticket[]
+  customers      Customer[]
+  whatsappConfig TenantWhatsApp?
+  activities     ActivityLog[]
+  tenantCatalogItems TenantCatalogItem[]
+  ticketCounter      TicketCounter?
+  invoiceSequences   InvoiceSequence[]
+
+  @@map("tenants")
+}
+
+model User {
+  id                String     @id @default(uuid())
+  tenantId          String?
+  email             String     @unique
+  password          String
+  name              String
+  phone             String?
+  address           String?
+  emergencyContact  String?
+  role              Role       @default(ADVISOR)
+  status            UserStatus @default(ACTIVE)
+  maxConcurrentJobs Int?
+  setupToken        String?
+  setupTokenExpiry  DateTime?
+  refreshToken      String?
+  refreshTokenExpiry DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  tenant           Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedTickets  Ticket[]      @relation("AssignedAgent")
+  activities       ActivityLog[]
+  recordedPayments Payment[]
+
+  @@index([tenantId, createdAt])
+  @@map("users")
+}
+
+model Customer {
+  id           String       @id @default(uuid())
+  tenantId     String
+  name         String
+  email        String?
+  phone        String?
+  whatsappId   String?
+  address      String?
+  customerType CustomerType @default(WALK_IN)
+  notes        String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, name])
+  @@map("customers")
+}
+
+model Ticket {
+  id                      String         @id @default(uuid())
+  tenantId                String
+  customerId              String
+  assignedToId            String?
+  jobNumber               String
+  ticketNumber            String
+  publicToken             String @unique
+  title                   String
+  description             String
+  status                  TicketStatus   @default(RECEIVED)
+  priority                TicketPriority @default(NORMAL)
+  estimatedCompletionDate DateTime?
+  actualCompletionDate    DateTime?
+
+  // 3. Item / Device Info
+  itemCategory  String?
+  brand         String?
+  model         String?
+  serialNumber  String?
+  itemCondition String?
+  accessories   String?
+  globalCatalogItemId String?
+  tenantCatalogItemId String?
+  globalCatalogItem   GlobalCatalogItem? @relation(fields: [globalCatalogItemId], references: [id], onDelete: SetNull)
+  tenantCatalogItem   TenantCatalogItem? @relation(fields: [tenantCatalogItemId], references: [id], onDelete: SetNull)
+  photos        Json? // Legacy — use attachments
+  attachments   Json? // [{ url, type, stage, uploadedBy, uploadedAt }]
+
+  // 4. Problem & Diagnosis
+  reportedIssue  String?
+  techDiagnosis  String?
+  diagnosisNotes String?
+  rootCause      String?
+
+  // 5. Work & Parts
+  partsRequired    Json? // Array of objects { name, partNumber, quantity }
+  partsSourcedFrom String?
+  laborDescription String?
+  timeSpent        String?
+  warrantyStatus   String?
+
+  // 6. Cost & Invoicing
+  estimatedCost      Decimal?
+  approvedByCustomer Boolean       @default(false)
+  approvalMethod     String?
+  approvalDate       DateTime?
+  partsCost          Decimal?
+  laborCost          Decimal?
+  tax                Decimal?
+  discount           Decimal?
+  totalAmount        Decimal?
+  paymentStatus      PaymentStatus @default(UNPAID)
+  paymentMethod      String?
+  invoiceNumber      String?
+  advanceDeposit     Decimal?
+
+  // 7. Communication
+  internalNotes String?
+
+  // 8. Closure
+  pickupDate         DateTime?
+  pickupSignatureUrl String?
+  feedbackRating     Int?
+  followUpDate       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer   Customer  @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  assignedTo User?     @relation("AssignedAgent", fields: [assignedToId], references: [id], onDelete: SetNull)
+  payments   Payment[]
+  lineItems  TicketLineItem[]
+  invoice    Invoice?
+
+  @@unique([tenantId, jobNumber])
+  @@unique([tenantId, ticketNumber])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, assignedToId, status, createdAt])
+  @@map("tickets")
+}
+
+model Payment {
+  id           String      @id @default(uuid())
+  ticketId     String
+  tenantId     String
+  amount       Decimal
+  type         PaymentType
+  method       String?
+  notes        String?
+  reference    String?
+  recordedById String?
+  paidAt       DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+
+  ticket     Ticket @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  recordedBy User?  @relation(fields: [recordedById], references: [id], onDelete: SetNull)
+  invoiceId  String?
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId])
+  @@index([tenantId, ticketId, paidAt])
+  @@map("payments")
+}
+
+model Template {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  category  String
+  status    String   @default("APPROVED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("templates")
+}
+
+model TenantWhatsApp {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  wabaId        String
+  phoneNumberId String
+  accessToken   String // Encrypted
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_whatsapp")
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  userId    String?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("activity_logs")
+}
+
+model GlobalCatalogItem {
+  id             String   @id @default(uuid())
+  name           String
+  normalizedName String   @unique
+  manufacturer   String?
+  itemType       String   @default("Device") // Device, Spare Part, Accessory, Component, Consumable, Other
+  category       String   // Smartphone, Laptop, etc.
+  modelNumber    String?
+  searchAliases  String?  // JSON array string
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tickets            Ticket[]
+  tenantCatalogItems TenantCatalogItem[]
+
+  @@map("global_catalog_items")
+}
+
+model TenantCatalogItem {
+  id                  String             @id @default(uuid())
+  tenantId            String
+  name                String
+  normalizedName      String
+  manufacturer        String?
+  itemType            String             @default("Device")
+  category            String
+  modelNumber         String?
+  globalCatalogItemId String?
+  createdBy           String?
+  usageCount          Int                @default(1)
+  firstUsedAt         DateTime           @default(now())
+  lastUsedAt          DateTime           @default(now())
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  globalCatalogItem GlobalCatalogItem? @relation(fields: [globalCatalogItemId], references: [id], onDelete: SetNull)
+  tickets           Ticket[]
+
+  @@unique([tenantId, normalizedName])
+  @@index([tenantId, normalizedName])
+  @@map("tenant_catalog_items")
+}
+
+model TicketLineItem {
+  id                String    @id @default(uuid())
+  ticketId          String
+  tenantId          String?   // Denormalized for multi-tenant queries
+  type              String    // "PART" | "LABOR" | "SERVICE" | "PRODUCT" | "OTHER"
+  description       String
+  quantity          Decimal   @default(1) @db.Decimal(10, 2)
+  unitPrice         Decimal   @db.Decimal(10, 2)
+  subtotal          Decimal   @db.Decimal(10, 2) // quantity * unitPrice - discountAmount (before tax)
+  discountAmount    Decimal   @default(0) @db.Decimal(10, 2)
+  taxMode           String    @default("NONE")   // "EXCLUSIVE" | "INCLUSIVE" | "NONE"
+  taxRate           Decimal   @default(0) @db.Decimal(5, 2)
+  taxAmount         Decimal   @default(0) @db.Decimal(10, 2)
+  lineTotal         Decimal   @db.Decimal(10, 2) // subtotal + taxAmount
+
+  // Warranty Snapshot
+  warrantyEnabled   Boolean   @default(false)
+  warrantyDuration  Int?
+  warrantyUnit      String?   // "DAYS" | "MONTHS" | "YEARS"
+  warrantyCoverage  String?
+  warrantyStartDate DateTime?
+  warrantyEndDate   DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  ticket            Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([tenantId])
+  @@map("ticket_line_items")
+}
+
+model Invoice {
+  id             String   @id @default(uuid())
+  ticketId       String   @unique
+  tenantId       String   // Denormalized for multi-tenant queries
+  invoiceNumber  String?  // Nullable for DRAFT; set on finalization
+  publicToken    String   @unique
+  status         String   @default("DRAFT") // "DRAFT" | "FINALIZED" | "VOID"
+  paymentStatus  String   @default("UNPAID") // "UNPAID" | "PARTIALLY_PAID" | "PAID"
+  detailLevel    String   @default("STANDARD") // "SIMPLE" | "STANDARD" | "DETAILED"
+
+  subtotal       Decimal  @default(0) @db.Decimal(10, 2)
+  discount       Decimal  @default(0) @db.Decimal(10, 2)
+  taxableAmount  Decimal  @default(0) @db.Decimal(10, 2)
+  tax            Decimal  @default(0) @db.Decimal(10, 2)
+  total          Decimal  @default(0) @db.Decimal(10, 2)
+  amountPaid     Decimal  @default(0) @db.Decimal(10, 2)
+  balanceDue     Decimal  @default(0) @db.Decimal(10, 2)
+
+  notes          String?  // Customer-facing notes printed on invoice
+  lineItemsSnapshot Json? // Immutable snapshot of line items captured at finalization
+
+  invoiceDate    DateTime @default(now())
+  dueDate        DateTime?
+  finalizedAt    DateTime?
+  finalizedById  String?
+  voidedAt       DateTime?
+  voidedById     String?
+  voidReason     String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ticket         Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  payments       Payment[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@map("invoices")
+}
+
+/// Per-tenant, never-reset ticket counter. Prisma's atomic `increment` is
+/// used when allocating ticket numbers.
+model TicketCounter {
+  tenantId       String @id
+  ticketSequence Int    @default(0)
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_counters")
+}
+
+/// Per-tenant, per-calendar-year invoice counter.
+model InvoiceSequence {
+  id              String @id @default(uuid())
+  tenantId        String
+  year            Int
+  invoiceSequence Int    @default(0)
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year])
+  @@map("invoice_sequences")
+}

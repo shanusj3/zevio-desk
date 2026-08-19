@@ -1,0 +1,6 @@
+{
+  "name": "Node.js Modular Server Architecture",
+  "description": "Enterprise-grade Node.js Express server with modular architecture, Prisma schema, auth, tenant, ticket, customer & WhatsApp modules, plus live API explorer dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

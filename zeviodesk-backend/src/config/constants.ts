@@ -1,0 +1,31 @@
+export const HTTP_STATUS = {
+  OK: 200,
+  CREATED: 201,
+  BAD_REQUEST: 400,
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  INTERNAL_SERVER_ERROR: 500,
+} as const;
+
+export const ROLES = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  TENANT_ADMIN: "TENANT_ADMIN",
+  AGENT: "AGENT",
+  CUSTOMER: "CUSTOMER",
+} as const;
+
+export const TICKET_STATUS = {
+  OPEN: "OPEN",
+  IN_PROGRESS: "IN_PROGRESS",
+  RESOLVED: "RESOLVED",
+  CLOSED: "CLOSED",
+} as const;
+
+export const TICKET_PRIORITY = {
+  LOW: "LOW",
+  MEDIUM: "MEDIUM",
+  HIGH: "HIGH",
+  URGENT: "URGENT",
+} as const;
