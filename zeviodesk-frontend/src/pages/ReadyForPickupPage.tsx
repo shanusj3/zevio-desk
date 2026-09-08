@@ -6,6 +6,7 @@ import { ReadyForPickupTicket, ticketsApi } from '../lib/api';
 import { useCreatePaymentMutation } from '../hooks/useTicketsQuery';
 import { useAppStore } from '../store/useAppStore';
 import { TableRowSkeleton } from '../components/Skeleton';
+import { StatusBadge } from '../components/StatusBadge';
 import { formatCurrency } from '../utils/formatters';
 
 const money = (value: string | number | null | undefined) =>
@@ -166,9 +167,7 @@ export function ReadyForPickupPage() {
                       {/* Invoice Status */}
                       <td className="py-4 px-5">
                         <div className="flex flex-col">
-                          <span className="inline-flex items-center w-fit px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Issued
-                          </span>
+                          <StatusBadge status="ISSUED" size="sm" />
                           {invoice?.invoiceNumber && (
                             <span className="text-[11px] font-mono text-[#64748B] mt-1">
                               {invoice.invoiceNumber}
@@ -179,18 +178,11 @@ export function ReadyForPickupPage() {
 
                       {/* Payment Status */}
                       <td className="py-4 px-5">
-                        {isPaid ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Paid
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            {paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PARTIAL'
-                              ? 'Partial'
-                              : 'Unpaid'}
-                          </span>
-                        )}
+                        <StatusBadge
+                          status={isPaid ? 'PAID' : (paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PARTIAL' ? 'PENDING' : 'UNPAID')}
+                          label={isPaid ? 'Paid' : (paymentStatus === 'PARTIALLY_PAID' || paymentStatus === 'PARTIAL' ? 'Partial' : 'Unpaid')}
+                          size="sm"
+                        />
                       </td>
 
                       {/* Action Button: Checkout */}

@@ -7,6 +7,7 @@ import { useInvoicesListQuery } from '../hooks/useInvoicesQuery';
 import { InvoiceListItem } from '../lib/api';
 import { formatCurrency } from '../utils/formatters';
 import { SearchInput } from '../components/ui/SearchInput';
+import { EmptyState } from '../components/common/EmptyState';
 
 type PaymentFilter = 'ALL' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
 
@@ -143,17 +144,11 @@ export const InvoicesPage: React.FC<InvoicesPageProps> = ({ onNewInvoice, onSele
             <Loader2 className="w-6 h-6 animate-spin text-[#116dff]" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 space-y-3 text-center px-6">
-            <div className="w-14 h-14 rounded-2xl bg-[#116dff]/10 flex items-center justify-center">
-              <FileText className="w-7 h-7 text-[#116dff]" />
-            </div>
-            <p className="text-sm font-semibold text-[#1e293b]">No invoices found</p>
-            <p className="text-xs text-[#94a3b8] max-w-xs">
-              {invoices.length === 0
-                ? 'Click "+ New Invoice" to start billing a repair ticket.'
-                : 'Try a different search term or filter.'}
-            </p>
-          </div>
+          <EmptyState
+            icon={<FileText className="w-7 h-7 text-[#116dff]" />}
+            title="No invoices found"
+            description={invoices.length === 0 ? 'Click "+ New Invoice" to start billing a repair ticket.' : 'Try a different search term or filter.'}
+          />
         ) : (
           <div className="divide-y divide-[#e2e8f0]">
             {/* Column headers */}

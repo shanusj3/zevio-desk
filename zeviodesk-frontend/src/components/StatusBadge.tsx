@@ -1,9 +1,18 @@
 import React from 'react';
-import { Check, Clock, X, Plus, AlertCircle } from 'lucide-react';
+import { Check, Clock, X, Plus, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { getStatusLabel } from '../lib/ticketDisplay';
 
-interface StatusBadgeProps {
-  status: string;
+export type BadgeStatusType =
+  | 'RECEIVED' | 'NEW'
+  | 'DIAGNOSING' | 'WAITING_FOR_PARTS' | 'WAITING' | 'PENDING' | 'IN_PROGRESS'
+  | 'REPAIR_COMPLETED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'DELIVERED' | 'ACCEPTED'
+  | 'PAID' | 'UNPAID' | 'PARTIALLY_PAID' | 'PARTIAL' | 'ISSUED' | 'DRAFT'
+  | 'CANCELLED' | 'DECLINED' | 'VOID' | 'REJECTED' | 'EXPIRED'
+  | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE'
+  | string;
+
+export interface StatusBadgeProps {
+  status: BadgeStatusType;
   label?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -16,7 +25,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   size = 'md',
 }) => {
   const displayLabel = customLabel || getStatusLabel(status);
-  const s = status.toUpperCase();
+  const s = String(status || '').toUpperCase();
 
   // Size styling maps
   const paddingMap = {
@@ -37,7 +46,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     lg: 'w-3 h-3 stroke-[3]',
   };
 
-  // Status style definitions corresponding directly to user image design
+  // Status style definitions
   if (s === 'IN_PROGRESS' || s === 'ADDED' || s === 'ACTIVE') {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold bg-[#007aff] text-white ${paddingMap[size]} ${className}`}>
@@ -49,7 +58,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     );
   }
 
-  if (s === 'WAITING_FOR_PARTS' || s === 'WAITING' || s === 'PENDING' || s === 'DIAGNOSING') {
+  if (s === 'WAITING_FOR_PARTS' || s === 'WAITING' || s === 'PENDING' || s === 'DIAGNOSING' || s === 'PARTIALLY_PAID' || s === 'PARTIAL') {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold bg-[#fff4eb] text-[#f97316] ${paddingMap[size]} ${className}`}>
         <span className={`${iconContainerSize[size]} rounded-full bg-[#f97316] text-white flex items-center justify-center shrink-0`}>
@@ -60,7 +69,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     );
   }
 
-  if (s === 'COMPLETED' || s === 'ACCEPTED' || s === 'READY_FOR_PICKUP' || s === 'PAID' || s === 'DELIVERED') {
+  if (s === 'COMPLETED' || s === 'ACCEPTED' || s === 'READY_FOR_PICKUP' || s === 'REPAIR_COMPLETED' || s === 'PAID' || s === 'DELIVERED' || s === 'ISSUED') {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold bg-[#eefcf3] text-[#10b981] ${paddingMap[size]} ${className}`}>
         <span className={`${iconContainerSize[size]} rounded-full bg-[#10b981] text-white flex items-center justify-center shrink-0`}>
@@ -71,7 +80,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     );
   }
 
-  if (s === 'CANCELLED' || s === 'DECLINED' || s === 'VOID' || s === 'REJECTED' || s === 'EXPIRED') {
+  if (s === 'CANCELLED' || s === 'DECLINED' || s === 'VOID' || s === 'REJECTED' || s === 'EXPIRED' || s === 'UNPAID' || s === 'SUSPENDED') {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold bg-[#fff0f0] text-[#ef4444] ${paddingMap[size]} ${className}`}>
         <span className={`${iconContainerSize[size]} rounded-full bg-[#ef4444] text-white flex items-center justify-center shrink-0`}>
@@ -82,7 +91,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     );
   }
 
-  if (s === 'RECEIVED' || s === 'NEW') {
+  if (s === 'RECEIVED' || s === 'NEW' || s === 'DRAFT') {
     return (
       <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold bg-[#eff6ff] text-[#0284c7] ${paddingMap[size]} ${className}`}>
         <span className={`${iconContainerSize[size]} rounded-full bg-[#0284c7] text-white flex items-center justify-center shrink-0`}>
