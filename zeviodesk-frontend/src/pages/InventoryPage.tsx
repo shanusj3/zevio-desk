@@ -16,6 +16,8 @@ import { ExportScope } from '../components/ExportScopeModal';
 import { InventoryItem, StockMovement, inventoryApi } from '../lib/api';
 import { downloadCsv } from '../lib/csvExport';
 import { formatCurrency } from '../utils/formatters';
+import { SearchInput } from '../components/ui/SearchInput';
+import { Pagination } from '../components/common/Pagination';
 
 const INVENTORY_CSV_HEADERS = [
   'Name', 'SKU', 'Barcode', 'Brand', 'Category', 'Description',
@@ -282,19 +284,15 @@ export const InventoryPage: React.FC = () => {
       {/* Table controls */}
       <div className="bg-white border border-[#e2e8f0] rounded-xl shadow-sm overflow-hidden">
         <div className="p-5 border-b border-[#e2e8f0] flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative flex-1 md:max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search part name, brand, SKU..."
-              className="w-full h-11 bg-[#f8fafc] border border-[#e2e8f0] rounded-lg pl-10 pr-4 text-xs text-[#1e293b] placeholder-[#94a3b8] focus:outline-none focus:border-[#116dff] transition-colors"
-            />
-          </div>
+          <SearchInput
+            containerClassName="flex-1 md:max-w-md"
+            placeholder="Search part name, brand, SKU..."
+            value={search}
+            onChange={(val) => {
+              setSearch(val);
+              setPage(1);
+            }}
+          />
 
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative min-w-40">
@@ -508,31 +506,14 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-[#e2e8f0] flex items-center justify-between text-xs text-[#64748B]">
-            <div>
-              Showing <span className="font-semibold text-[#1e293b]">{(page - 1) * itemsPerPage + 1}</span> to{' '}
-              <span className="font-semibold text-[#1e293b]">{Math.min(page * itemsPerPage, totalItems)}</span> of{' '}
-              <span className="font-semibold text-[#1e293b]">{totalItems}</span> items
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage(page - 1)}
-                className="px-3 py-1.5 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#334155] disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
-              >
-                Previous
-              </button>
-              <button
-                disabled={page === totalPages}
-                onClick={() => setPage(page + 1)}
-                className="px-3 py-1.5 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] hover:bg-[#f1f5f9] text-[#334155] disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={itemsPerPage}
+          onPageChange={setPage}
+          showingLabel="items"
+        />
       </div>
 
       {/* Adjust Stock Modal - Light Theme with Primary Accent */}

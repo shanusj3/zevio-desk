@@ -6,6 +6,7 @@ import {
 import { useInvoicesListQuery } from '../hooks/useInvoicesQuery';
 import { InvoiceListItem } from '../lib/api';
 import { formatCurrency } from '../utils/formatters';
+import { SearchInput } from '../components/ui/SearchInput';
 
 type PaymentFilter = 'ALL' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
 
@@ -110,17 +111,13 @@ export const InvoicesPage: React.FC<InvoicesPageProps> = ({ onNewInvoice, onSele
       <div className="rounded-2xl border border-[#e2e8f0] bg-white overflow-hidden shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 px-5 py-4 border-b border-[#e2e8f0]">
           {/* Search */}
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94a3b8]" />
-            <input
-              id="invoices-search"
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search invoice, customer, phone, ticket..."
-              className="w-full h-10 pl-9 pr-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-sm text-[#1e293b] placeholder:text-[#94a3b8] outline-none focus:border-[#116dff]/50 transition"
-            />
-          </div>
+          <SearchInput
+            id="invoices-search"
+            containerClassName="flex-1 w-full"
+            placeholder="Search invoice, customer, phone, ticket..."
+            value={search}
+            onChange={setSearch}
+          />
           {/* Filter tabs */}
           {!outstandingOnly && <div className="flex gap-1 rounded-xl border border-[#e2e8f0] bg-[#f8fafc] p-1 shrink-0">
             {FILTER_TABS.map(tab => (

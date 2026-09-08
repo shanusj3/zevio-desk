@@ -29,6 +29,7 @@ import { useAppStore } from '../store/useAppStore';
 import { ExportScopeModal, ExportScope } from '../components/ExportScopeModal';
 import { ReportsSkeleton } from '../components/Skeleton';
 import { formatCurrency as formatCurrencyUtil, formatDate, formatDateRange } from '../utils/formatters';
+import { Pagination } from '../components/common/Pagination';
 
 export type ReportTab = 'overview' | 'revenue' | 'tickets' | 'payments' | 'technicians' | 'inventory' | 'profitability';
 export type TimeframeOption = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM';
@@ -958,27 +959,14 @@ export const TenantReportsView: React.FC<TenantReportsViewProps> = ({ initialTab
                   </table>
                 </div>
 
-                {data.payments.pagination.totalPages > 1 && (
-                  <div className="flex items-center justify-end gap-2 pt-2">
-                    <button
-                      onClick={() => setPaymentsPage(prev => Math.max(prev - 1, 1))}
-                      disabled={paymentsPage === 1}
-                      className="p-1.5 bg-white hover:bg-[#f8fafc] text-[#1e293b] rounded-lg border border-[#dfe5eb] disabled:opacity-50 cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs text-[#64748b] font-mono">
-                      Page {data.payments.pagination.page} of {data.payments.pagination.totalPages}
-                    </span>
-                    <button
-                      onClick={() => setPaymentsPage(prev => Math.min(prev + 1, data.payments.pagination.totalPages))}
-                      disabled={paymentsPage === data.payments.pagination.totalPages}
-                      className="p-1.5 bg-white hover:bg-[#f8fafc] text-[#1e293b] rounded-lg border border-[#dfe5eb] disabled:opacity-50 cursor-pointer"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
+                <Pagination
+                  page={data.payments.pagination.page}
+                  totalPages={data.payments.pagination.totalPages}
+                  totalItems={data.payments.pagination.total}
+                  pageSize={10}
+                  onPageChange={setPaymentsPage}
+                  showingLabel="bills"
+                />
               </div>
             </div>
           )}

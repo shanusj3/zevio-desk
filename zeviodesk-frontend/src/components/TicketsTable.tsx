@@ -23,6 +23,7 @@ import { TableRowSkeleton } from './Skeleton';
 import { useAppStore } from '../store/useAppStore';
 import { getStatusLabel, getStatusBadge, getPriorityBadge, getPriorityTextStyle, getWarrantyDisplay } from '../lib/ticketDisplay';
 import { StatusBadge } from './StatusBadge';
+import { SearchInput } from './ui/SearchInput';
 
 interface TicketsTableProps {
   isHeaderOut?: boolean;
@@ -358,24 +359,14 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
             </button>
 
             {/* Backend Search Input */}
-            <div className="relative flex-1 md:w-80">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary" />
-              <input
-                type="text"
-                placeholder="Search by ticket #, job #, phone, device model..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full h-9 bg-white border border-[#e2e8f0] rounded-full pl-9 pr-4 text-xs text-[#1e293b] placeholder-[#94a3b8] focus:outline-none focus:border-primary transition-colors"
-              />
-              {searchInput && (
-                <button
-                  onClick={() => setSearchInput('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#1e293b]"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+            <SearchInput
+              variant="pill"
+              size="sm"
+              containerClassName="flex-1 md:w-80"
+              placeholder="Search by ticket #, job #, phone, device model..."
+              value={searchInput}
+              onChange={setSearchInput}
+            />
           </div>
         </div>
       </div>
