@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Tenant, FilterOptions, NotificationItem, ActiveTab } from '../types';
+import { authApi } from '../lib/api';
 
 export interface User {
   id: string;
@@ -64,8 +65,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   logout: async () => {
     try {
-      // @ts-ignore - authApi is typically imported in components, but we can do a raw fetch here to avoid circular dep
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      await authApi.logout();
     } catch (e) {}
     localStorage.removeItem('zevio_auth_status');
     set({ isAuthenticated: false, currentUser: null });

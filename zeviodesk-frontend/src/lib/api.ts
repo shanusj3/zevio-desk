@@ -3,7 +3,7 @@ import { PriceMode, RoundingRule, TaxTreatment } from './tax';
 export * from './tax';
 export * from './warranty';
 
-const BASE_URL = 'http://localhost:3001/api';
+export const BASE_URL = 'http://localhost:3001/api';
 
 // ── Token storage ─────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'zevio_token';

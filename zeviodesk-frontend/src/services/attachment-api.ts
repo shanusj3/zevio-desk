@@ -1,4 +1,4 @@
-import { request, tokenStore } from '../lib/api';
+import { request, tokenStore, BASE_URL } from '../lib/api';
 import {
   InitiateUploadPayload,
   InitiateUploadResult,
@@ -62,8 +62,8 @@ export const attachmentApi = {
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      const token = tokenStore.get() || localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
-      xhr.open('PUT', `http://localhost:3001/api/v1/attachments/${attachmentId}/upload`, true);
+      const token = tokenStore.get();
+      xhr.open('PUT', `${BASE_URL}/v1/attachments/${attachmentId}/upload`, true);
       xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -139,14 +139,14 @@ export const attachmentApi = {
    * Get content URL (returns ZevioDesk authenticated URL that issues 302 redirect)
    */
   getContentUrl(attachmentId: string): string {
-    return `http://localhost:3001/api/v1/attachments/${attachmentId}/content`;
+    return `${BASE_URL}/v1/attachments/${attachmentId}/content`;
   },
 
   /**
    * Get thumbnail URL
    */
   getThumbnailUrl(attachmentId: string): string {
-    return `http://localhost:3001/api/v1/attachments/${attachmentId}/thumbnail`;
+    return `${BASE_URL}/v1/attachments/${attachmentId}/thumbnail`;
   },
 
   /**
