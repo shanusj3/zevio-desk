@@ -1,5 +1,6 @@
 import React from 'react';
-import { Search, Upload, SlidersHorizontal } from 'lucide-react';
+import { Upload, SlidersHorizontal } from 'lucide-react';
+import { SearchInput } from '../ui/SearchInput';
 
 interface DataTableToolbarProps {
   searchValue: string;
@@ -49,15 +50,12 @@ export const DataTableToolbar: React.FC<DataTableToolbarProps> = ({
           </button>
         )}
 
-        {/* Search Input Box */}
-        <div className="relative flex-1 md:w-72">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#116dff]" />
-          <input
-            type="text"
+        {/* Standard Search Input */}
+        <div className="flex-1 md:w-72">
+          <SearchInput
             value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={onSearchChange}
             placeholder={searchPlaceholder}
-            className="w-full h-9 bg-white border border-[#cbd5e1] rounded-full pl-10 pr-4 text-xs text-[#1e293b] placeholder-[#94a3b8] focus:outline-none focus:border-[#116dff] transition-colors"
           />
         </div>
       </div>
