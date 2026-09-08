@@ -50,6 +50,13 @@ import { TicketDetailsSkeleton } from '../components/TicketDetailsSkeleton';
 import { WarrantyModal } from '../components/WarrantyModal';
 import { StatusBadge } from '../components/StatusBadge';
 
+import { TicketDetailsHeader } from '../components/ticket-details/TicketDetailsHeader';
+import { TicketDescriptionTab } from '../components/ticket-details/TicketDescriptionTab';
+import { TicketPartsTab } from '../components/ticket-details/TicketPartsTab';
+import { TicketPaymentsTab } from '../components/ticket-details/TicketPaymentsTab';
+import { TicketAttachmentsTab } from '../components/ticket-details/TicketAttachmentsTab';
+import { TicketActivityTab } from '../components/ticket-details/TicketActivityTab';
+
 type DetailsTab = 'description' | 'parts' | 'payments' | 'files' | 'activity';
 
 const tableShellClass =
@@ -569,107 +576,23 @@ export const TicketDetailsPage: React.FC<TicketDetailsPageProps> = ({ ticket, is
   return (
     <div className="-m-4 sm:-m-6 lg:-m-8 min-h-screen bg-[#ECEFF3] text-[#1e293b] flex flex-col">
       {/* Sticky Top Header */}
-      <div className="sticky -top-4 sm:-top-6 lg:-top-8 z-30 flex items-center justify-between gap-4 bg-white/95 backdrop-blur-md border-b border-[#cbd5e1] px-5 py-3.5 sm:px-8 shadow-xs transition-all">
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#f1f5f9] text-[#116dff] transition hover:bg-[#e2e8f0] cursor-pointer"
-          >
-            <ArrowLeft className="size-4" />
-          </button>
-          <div className="flex items-center gap-3">
-            <StatusBadge status={ticket.status} />
-            <span className="text-[#64748B] font-mono text-sm border-l border-[#e2e8f0] pl-3">
-              #{formatTicketReference(ticket)}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <button
-            type="button"
-            onClick={handleCopyTrackingLink}
-            className={`px-4 h-9 rounded-full text-xs font-medium flex items-center gap-2 border transition-all cursor-pointer bg-white ${
-              isLinkCopied
-                ? 'border-emerald-300 bg-emerald-50/50 text-emerald-700'
-                : 'border-blue-200 text-[#116dff] hover:bg-[#116dff] hover:text-white hover:border-[#116dff]'
-            }`}
-            title="Copy Customer Tracking Link"
-          >
-            {isLinkCopied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-600 animate-in zoom-in duration-150 shrink-0" />
-                <span className="font-bold">Link Copied!</span>
-              </>
-            ) : (
-              <>
-                <Link className="w-3.5 h-3.5 shrink-0" />
-                <span>Tracking Link</span>
-              </>
-            )}
-          </button>
-          {ticket.status !== 'DELIVERED' && ticket.status !== 'COMPLETED' && onEdit && (
-            <button
-              onClick={() => onEdit(ticket)}
-              className="px-4 h-9 rounded-full text-xs font-medium flex items-center gap-2 border border-[#e2e8f0] bg-white text-[#116dff] hover:bg-[#116dff] hover:text-white hover:border-[#116dff] transition-all cursor-pointer shadow-xs"
-            >
-              <Pencil className="w-3.5 h-3.5 shrink-0" />
-              <span>Edit</span>
-            </button>
-          )}
-          {/* Workflow Status Actions */}
-          {['RECEIVED', 'DIAGNOSING', 'WAITING_FOR_PARTS', 'IN_PROGRESS'].includes(ticket.status) ? (
-            <button
-              onClick={async () => {
-                try {
-                  await completeRepairMutation.mutateAsync(ticket.id);
-                  showToast('Repair marked as completed. Sent for invoice processing.', 'success');
-                } catch (err: any) {
-                  showToast(err.message || 'Failed to complete repair', 'warning');
-                }
-              }}
-              disabled={completeRepairMutation.isPending}
-              className="flex items-center gap-2 px-5 h-9 bg-[#116dff] hover:bg-[#0d5fd9] text-white font-bold rounded-full text-xs transition-all shadow-lg shadow-[#116dff]/10 cursor-pointer disabled:opacity-50"
-            >
-              {completeRepairMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4 shrink-0" />}
-              <span>Complete Repair</span>
-            </button>
-          ) : ticket.status === 'REPAIR_COMPLETED' ? (
-            isTechnician ? (
-              <div className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>✓ Repair Completed (Awaiting Invoice)</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => navigate(ticketBillingPath(ticket.id))}
-                className="flex items-center gap-2 px-5 h-9 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-full text-xs transition-all shadow-lg shadow-indigo-600/10 cursor-pointer"
-              >
-                <FileText className="w-4 h-4 shrink-0" />
-                <span>Generate Invoice</span>
-              </button>
-            )
-          ) : ticket.status === 'READY_FOR_PICKUP' ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate(ticketBillingPath(ticket.id))}
-                className="flex items-center gap-2 px-4 h-9 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-full text-xs transition-all cursor-pointer"
-              >
-                <IndianRupee className="w-4 h-4 shrink-0" />
-                <span>View Invoice</span>
-              </button>
-            </div>
-          ) : (ticket.status === 'DELIVERED' || ticket.status === 'COMPLETED') ? (
-            <button
-              onClick={() => navigate(ticketBillingPath(ticket.id))}
-              className="flex items-center gap-2 px-5 h-9 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-bold rounded-full text-xs transition-all cursor-pointer"
-            >
-              <IndianRupee className="w-4 h-4 shrink-0" />
-              <span>View Invoice</span>
-            </button>
-          ) : null}
-        </div>
-      </div>
+      <TicketDetailsHeader
+        ticket={ticket}
+        onBack={onBack}
+        onEdit={onEdit}
+        isLinkCopied={isLinkCopied}
+        onCopyTrackingLink={handleCopyTrackingLink}
+        isTechnician={isTechnician}
+        completeRepairMutationPending={completeRepairMutation.isPending}
+        onCompleteRepair={async () => {
+          try {
+            await completeRepairMutation.mutateAsync(ticket.id);
+            showToast('Repair marked as completed. Sent for invoice processing.', 'success');
+          } catch (err: any) {
+            showToast(err.message || 'Failed to complete repair', 'warning');
+          }
+        }}
+      />
 
       <div className="flex-1 max-w-[1440px] w-full mx-auto px-5 py-6 sm:px-8">
 
@@ -727,542 +650,41 @@ export const TicketDetailsPage: React.FC<TicketDetailsPageProps> = ({ ticket, is
 
             <div className="p-6">
               {activeTab === 'description' && (
-                <div className="space-y-5">
-                  {/* 1. REPORTED ISSUE Card */}
-                  <div className="bg-white border border-[#e2e8f0] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
-                    <div className="font-bold text-xs uppercase tracking-wider text-[#64748b]">
-                      <span>REPORTED ISSUE</span>
-                    </div>
-                    <div className="p-3.5 bg-rose-50/70 border border-rose-100 rounded-xl text-xs font-medium text-[#1e293b] leading-relaxed">
-                      {ticket.reportedIssue || 'No issue reported.'}
-                    </div>
-                  </div>
-
-                  {/* 2. TICKET OVERVIEW & CUSTOMER / ASSIGNEE 2-Column Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                    {/* Left Card: Ticket Overview */}
-                    <div className="bg-white border border-[#e2e8f0] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
-                      <div className="font-bold text-xs uppercase tracking-wider text-[#64748b]">
-                        <span>TICKET OVERVIEW</span>
-                      </div>
-                      <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 divide-y divide-[#e2e8f0]">
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Device / Model</span>
-                          <span className="font-bold text-[#1e293b] text-right">{ticket.title}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Job # / Reference</span>
-                          <span className="font-mono font-bold text-[#116dff]">{formatTicketReference(ticket)}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Status</span>
-                          <StatusBadge status={ticket.status} size="sm" />
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Priority</span>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${getPriorityStyle(ticket.priority)}`}>
-                            {ticket.priority}
-                          </span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Category</span>
-                          <span className="font-bold text-[#1e293b]">{ticket.itemCategory || '—'}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Date Created</span>
-                          <span className="font-medium text-[#1e293b]">{createdDate}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Card: Customer & Assignee */}
-                    <div className="bg-white border border-[#e2e8f0] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
-                      <div className="font-bold text-xs uppercase tracking-wider text-[#64748b]">
-                        <span>CUSTOMER & ASSIGNEE</span>
-                      </div>
-                      <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 divide-y divide-[#e2e8f0]">
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Customer</span>
-                          <span className="font-bold text-[#1e293b] text-right">{ticket.customer?.name || 'Walk-in'}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Mobile No</span>
-                          <span className="font-mono font-bold text-[#1e293b] text-right">{ticket.customer?.phone || '—'}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Assignee</span>
-                          <span className="font-bold text-[#1e293b]">{ticket.assignedTo?.name || 'Unassigned'}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Serial No</span>
-                          <span className="font-mono font-medium text-[#1e293b]">{ticket.serialNumber || '—'}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Brand</span>
-                          <span className="font-bold text-[#1e293b]">{ticket.brand || '—'}</span>
-                        </div>
-                        <div className="flex justify-between py-2 items-center">
-                          <span className="font-semibold text-[#64748b]">Model</span>
-                          <span className="font-bold text-[#1e293b]">{ticket.model || '—'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3. PHYSICAL CONDITION & ACCESSORIES Card */}
-                  <div className="bg-white border border-[#e2e8f0] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
-                    <div className="font-bold text-xs uppercase tracking-wider text-[#64748b]">
-                      <span>PHYSICAL CONDITION & ACCESSORIES</span>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 space-y-2">
-                        <span className="font-semibold text-[#64748b] block text-[10px] uppercase tracking-wider">Physical Condition</span>
-                        <p className="text-xs font-semibold text-[#1e293b] leading-relaxed">
-                          {ticket.itemCondition || 'No physical condition recorded.'}
-                        </p>
-                      </div>
-                      <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 space-y-2">
-                        <span className="font-semibold text-[#64748b] block text-[10px] uppercase tracking-wider">Accessories Received</span>
-                        <p className="text-xs font-semibold text-[#1e293b] leading-relaxed">
-                          {ticket.accessories || 'No accessories recorded.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Media/Images section */}
-                    {mediaAttachments && mediaAttachments.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-[#e2e8f0]">
-                        <span className="font-semibold text-[#64748b] block text-[10px] uppercase tracking-wider mb-2">Attached Images & Media</span>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                          {mediaAttachments.map((att: any) => (
-                            <a
-                              key={att.id || att.url}
-                              href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="relative aspect-square rounded-xl overflow-hidden border border-[#cbd5e1] group bg-white block hover:shadow-md transition-all duration-200"
-                            >
-                              {att.type === 'video' ? (
-                                <div className="w-full h-full relative">
-                                  <video src={att.url} className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/40 transition-colors">
-                                    <div className="bg-white/80 p-2 rounded-full shadow-sm">
-                                      <svg className="w-4 h-4 text-[#1e293b]" fill="currentColor" viewBox="0 0 24 24">
-                                        <path d="M8 5v14l11-7z" />
-                                      </svg>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <img src={att.url} alt={att.fileName || 'Attachment'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                              )}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 4. ADDITIONAL NOTES Card */}
-                  <div className="bg-white border border-[#e2e8f0] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
-                    <div className="font-bold text-xs uppercase tracking-wider text-[#64748b]">
-                      <span>ADDITIONAL NOTES</span>
-                    </div>
-                    <div className="p-3.5 bg-amber-50/60 border border-amber-100 rounded-xl text-xs font-medium text-[#1e293b] leading-relaxed">
-                      {ticket.internalNotes || '—'}
-                    </div>
-                  </div>
-                </div>
+                <TicketDescriptionTab
+                  ticket={ticket}
+                  createdDate={createdDate}
+                  mediaAttachments={mediaAttachments}
+                />
               )}
 
               {activeTab === 'parts' && (
-                <div className="space-y-4">
-                  {/* Top Section Header with Title & Add Part Button */}
-                  <div className="flex items-center justify-between pb-3 border-b border-[#e2e8f0]">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-[#1e293b]">Parts & Hardware Line Items</h3>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#eff6ff] text-[#116dff]">
-                        {partsLineItems.length} {partsLineItems.length === 1 ? 'item' : 'items'}
-                      </span>
-                    </div>
-                    {!isCompleted && (
-                      <button
-                        type="button"
-                        onClick={() => setIsPartsModalOpen(true)}
-                        className="flex items-center gap-2 px-5 h-10 bg-[#116dff] hover:bg-[#0d5fd9] text-white font-semibold rounded-full text-sm transition-colors shadow-sm cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" /> Add Part
-                      </button>
-                    )}
-                  </div>
-
-                  {partsLineItems.length > 0 ? (
-                    <div className={tableShellClass}>
-                      <table className={tableClass}>
-                        <thead className={theadClass}>
-                          <tr>
-                            <th className={thClass}>Part name</th>
-                            <th className={`${thClass} w-16 text-center`}>Qty</th>
-                            <th className={`${thClass} w-24 text-right`}>Unit price</th>
-                            <th className={`${thClass} w-24 text-right`}>Discount</th>
-                            <th className={`${thClass} w-28 text-right`}>GST / Tax</th>
-                            <th className={`${thClass} w-28 text-right`}>Line total</th>
-                            <th className={`${thClass} w-16 text-right`} aria-label="Actions">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className={tbodyDivide}>
-                          {partsLineItems.map(part => (
-                            <tr key={part.id} className="hover:bg-[#f8fafc]">
-                              <td className="px-4 py-3.5 font-bold text-[#1e293b]">{part.description}</td>
-                              <td className="px-4 py-3.5 text-center text-[#64748b] font-semibold">{parseFloat(String(part.quantity))}</td>
-                              <td className="px-4 py-3.5 text-right text-[#64748b] font-mono font-medium">₹{parseFloat(String(part.unitPrice)).toFixed(2)}</td>
-                              <td className="px-4 py-3.5 text-right text-rose-600 font-mono font-medium">
-                                {parseFloat(String(part.discountAmount || 0)) > 0 ? `-₹${parseFloat(String(part.discountAmount)).toFixed(2)}` : '—'}
-                              </td>
-                              <td className="px-4 py-3.5 text-right text-[#64748b] font-mono text-xs">
-                                {part.taxMode !== 'NONE' ? `₹${parseFloat(String(part.taxAmount)).toFixed(2)} (${parseFloat(String(part.taxRate))}% ${part.taxMode})` : '—'}
-                              </td>
-                              <td className="px-4 py-3.5 text-right text-[#1e293b] font-mono font-bold">
-                                ₹{parseFloat(String(part.lineTotal)).toFixed(2)}
-                              </td>
-                              <td className="px-4 py-3.5 text-right">
-                                {!isCompleted && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeletePart(part.id)}
-                                    className="p-1 text-[#94a3b8] hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-all inline-flex items-center justify-center"
-                                    title="Remove part"
-                                  >
-                                    <Trash2 className="w-4 h-4 text-rose-500" />
-                                  </button>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                          <tr className="bg-[#f8fafc] font-semibold border-t border-[#e2e8f0]">
-                            <td className="px-4 py-3.5 text-[#64748b]" colSpan={5}>
-                              Parts subtotal
-                            </td>
-                            <td className="px-4 py-3.5 text-[#116dff] font-mono text-right font-bold" colSpan={2}>
-                              ₹{totalPartsCost.toFixed(2)}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 px-4 bg-white rounded-2xl border border-dashed border-[#cbd5e1] text-center">
-                      <img
-                        src="/assets/no-parts.png"
-                        alt="No parts added"
-                        className="w-56 sm:w-64 h-auto mx-auto mb-3 object-contain"
-                      />
-                      <h4 className="text-base font-bold text-[#1e293b] mb-1">No parts added</h4>
-                      <p className="text-xs text-[#64748b] max-w-sm mb-5">
-                        No parts or hardware items have been added to this ticket yet. Click below to add line items.
-                      </p>
-                      {!isCompleted && (
-                        <button
-                          type="button"
-                          onClick={() => setIsPartsModalOpen(true)}
-                          className="flex items-center gap-2 px-5 h-10 bg-[#116dff] hover:bg-[#0d5fd9] text-white font-semibold rounded-full text-sm transition-colors shadow-sm cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" /> Add Part
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {isCompleted && (
-                    <div className="flex items-center justify-between w-full p-3 rounded-xl bg-[#f8fafc] border border-[#e2e8f0] text-xs text-[#64748b] mt-4">
-                      <span className="flex items-center gap-2 font-semibold text-amber-600">
-                        <Lock className="w-4 h-4" /> Ticket Completed & Sealed
-                      </span>
-                      <span>Part line items are locked and cannot be added or modified.</span>
-                    </div>
-                  )}
-                </div>
+                <TicketPartsTab
+                  partsLineItems={partsLineItems}
+                  totalPartsCost={totalPartsCost}
+                  isCompleted={isCompleted}
+                  onOpenAddPartModal={() => setIsPartsModalOpen(true)}
+                  onDeletePart={handleDeletePart}
+                />
               )}
 
-              {activeTab === 'payments' && (() => {
-                const upiSum = payments.filter(p => p.method === 'UPI').reduce((s, p) => s + Number(p.amount || 0), 0);
-                const cardSum = payments.filter(p => p.method === 'CARD').reduce((s, p) => s + Number(p.amount || 0), 0);
-                const cashSum = payments.filter(p => p.method === 'CASH').reduce((s, p) => s + Number(p.amount || 0), 0);
-                const totalPaid = upiSum + cardSum + cashSum;
+              {activeTab === 'payments' && (
+                <TicketPaymentsTab
+                  payments={payments}
+                  isCompleted={isCompleted}
+                  onOpenRecordPaymentModal={() => setIsPaymentModalOpen(true)}
+                  onDeletePayment={(p) => setPaymentToDelete(p)}
+                />
+              )}
 
-                return (
-                  <div className="space-y-4">
-                    {/* Top Section Header with Title & Record Payment Button */}
-                    <div className="flex items-center justify-between pb-3 border-b border-[#e2e8f0]">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-[#1e293b]">Payment Transactions</h3>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#eff6ff] text-[#116dff]">
-                          {payments.length} {payments.length === 1 ? 'record' : 'records'}
-                        </span>
-                      </div>
-                      {!isCompleted && (
-                        <button
-                          type="button"
-                          onClick={() => setIsPaymentModalOpen(true)}
-                          className="px-3.5 py-2 bg-[#116dff] hover:bg-[#2563eb] text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                        >
-                          <Plus className="w-4 h-4" /> Record Payment
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Breakdown Pill Badges */}
-                    <div className="flex items-center gap-2.5 flex-wrap text-xs">
-                      <div className="px-4 py-1.5 rounded-full bg-[#116dff] text-white font-bold flex items-center gap-1.5 font-mono shadow-xs">
-                        Total Paid: <span>₹{totalPaid.toFixed(2)}</span>
-                      </div>
-                      <div className="px-4 py-1.5 rounded-full bg-[#10b981] text-white font-bold flex items-center gap-1.5 font-mono shadow-xs">
-                        UPI: <span>₹{upiSum.toFixed(2)}</span>
-                      </div>
-                      <div className="px-4 py-1.5 rounded-full bg-[#3b82f6] text-white font-bold flex items-center gap-1.5 font-mono shadow-xs">
-                        Card: <span>₹{cardSum.toFixed(2)}</span>
-                      </div>
-                      <div className="px-4 py-1.5 rounded-full bg-[#8b5cf6] text-white font-bold flex items-center gap-1.5 font-mono shadow-xs">
-                        Cash: <span>₹{cashSum.toFixed(2)}</span>
-                      </div>
-                    </div>
-
-                    {payments.length > 0 ? (
-                      <div className={tableShellClass}>
-                        <table className={tableClass}>
-                          <thead className={theadClass}>
-                            <tr>
-                              <th className={thClass}>Date & Time</th>
-                              <th className={thClass}>Type</th>
-                              <th className={thClass}>Method</th>
-                              <th className={thClass}>Notes</th>
-                              <th className={`${thClass} text-right`}>Amount</th>
-                              {!isCompleted && <th className={`${thClass} text-center w-12`}></th>}
-                            </tr>
-                          </thead>
-                          <tbody className={tbodyDivide}>
-                            {payments.map((p) => (
-                              <tr key={p.id} className="hover:bg-[#f8fafc]">
-                                <td className="px-4 py-3.5 text-xs text-[#64748b] font-mono whitespace-nowrap">
-                                  {new Date(p.paidAt).toLocaleString()}
-                                </td>
-                                <td className="px-4 py-3.5">
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${p.type === 'ADVANCE' ? 'bg-purple-100 text-purple-700' : p.type === 'PARTS' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'
-                                    }`}>
-                                    {p.type}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3.5 font-bold text-[#1e293b] text-xs">
-                                  {p.method}
-                                </td>
-                                <td className="px-4 py-3.5 text-xs text-[#64748b]">
-                                  {p.notes || '—'}
-                                </td>
-                                <td className="px-4 py-3.5 text-right font-mono font-bold text-[#1e293b]">
-                                  ₹{Number(p.amount).toFixed(2)}
-                                </td>
-                                {!isCompleted && (
-                                  <td className="px-4 py-3.5 text-center">
-                                    <button
-                                      type="button"
-                                      onClick={() => setPaymentToDelete(p)}
-                                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Delete Payment Record"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-10 px-4 bg-white rounded-2xl border border-dashed border-[#cbd5e1] text-center">
-                        <img
-                          src="/assets/no-payments.png"
-                          alt="No payments recorded"
-                          className="w-56 sm:w-64 h-auto mx-auto mb-3 object-contain"
-                        />
-                        <h4 className="text-base font-bold text-[#1e293b] mb-1">No payments recorded yet</h4>
-                        <p className="text-xs text-[#64748b] max-w-sm mb-5">
-                          No payment transactions have been logged for this ticket yet. Click below to record a payment.
-                        </p>
-                        {!isCompleted && (
-                          <button
-                            type="button"
-                            onClick={() => setIsPaymentModalOpen(true)}
-                            className="flex items-center gap-2 px-5 h-10 bg-[#116dff] hover:bg-[#0d5fd9] text-white font-semibold rounded-full text-sm transition-colors shadow-sm cursor-pointer"
-                          >
-                            <Plus className="w-4 h-4" /> Record Payment
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {isCompleted && (
-                      <div className="flex items-center justify-between w-full p-3 rounded-xl bg-[#f8fafc] border border-[#e2e8f0] text-xs text-[#64748b] mt-4">
-                        <span className="flex items-center gap-2 font-semibold text-amber-600">
-                          <Lock className="w-4 h-4" /> Ticket Completed & Sealed
-                        </span>
-                        <span>Payment records are locked and cannot be added or modified.</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* 5. FILES TAB CONTENT */}
               {activeTab === 'files' && (
-                <div className="p-5 sm:p-6 space-y-6">
-                  <div className="border-b border-[#e2e8f0] pb-4">
-                    <h3 className="text-sm font-bold text-[#1e293b] flex items-center gap-2">
-
-                      Intake Files & Media ({mediaAttachments.length})
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Photos, videos & media captured during device intake or repair process
-                    </p>
-                  </div>
-
-                  {mediaAttachments.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 px-4 bg-white rounded-2xl border border-dashed border-[#cbd5e1] text-center">
-                      <img
-                        src="/assets/no-files.png"
-                        alt="No files attached"
-                        className="w-56 sm:w-64 h-auto mx-auto mb-3 object-contain"
-                      />
-                      <h4 className="text-base font-bold text-[#1e293b] mb-1">No files attached</h4>
-                      <p className="text-xs text-[#64748b] max-w-sm">
-                        No intake photos, videos, or media files were added when this ticket was created.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                      {mediaAttachments.map((att: any, idx: number) => {
-                        const isVideo = att.type === 'video' || (att.mimeType && att.mimeType.startsWith('video/'));
-                        return (
-                          <div
-                            key={att.id || att.url || idx}
-                            className="group relative bg-white border border-[#e2e8f0] rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 flex flex-col"
-                          >
-                            <a
-                              href={att.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="relative aspect-square bg-slate-100 block overflow-hidden"
-                            >
-                              {isVideo ? (
-                                <div className="w-full h-full relative">
-                                  <video src={att.url} className="w-full h-full object-cover" />
-                                  <div className="absolute inset-0 bg-slate-900/30 flex items-center justify-center group-hover:bg-slate-900/40 transition-colors">
-                                    <div className="bg-white/90 p-2.5 rounded-full shadow-md">
-                                      <PlayCircle className="w-5 h-5 text-[#116dff]" />
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <img
-                                  src={att.url}
-                                  alt={att.fileName || `Photo ${idx + 1}`}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                />
-                              )}
-                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className="bg-slate-900/70 backdrop-blur-xs text-white p-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1">
-                                  <Maximize2 className="w-3 h-3" />
-                                </span>
-                              </div>
-                            </a>
-                            <div className="p-3 bg-white border-t border-[#f1f5f9] flex items-center justify-between">
-                              <span className="text-[11px] font-semibold text-[#1e293b] truncate">
-                                {att.fileName || (isVideo ? `Video #${idx + 1}` : `Photo #${idx + 1}`)}
-                              </span>
-                              <a
-                                href={att.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                download
-                                className="text-slate-400 hover:text-[#116dff] transition-colors p-1"
-                                title="Open full size"
-                              >
-                                <Maximize2 className="w-3.5 h-3.5" />
-                              </a>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <TicketAttachmentsTab mediaAttachments={mediaAttachments} />
               )}
 
               {activeTab === 'activity' && (
-                <div className="space-y-4">
-                  {/* Top Section Header with Title & Add Comment Button */}
-                  <div className="flex items-center justify-between pb-3 border-b border-[#e2e8f0]">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-[#1e293b]">Activity & Comments</h3>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#eff6ff] text-[#116dff]">
-                        {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsActivityModalOpen(true)}
-                      className="px-3.5 py-2 bg-[#116dff] hover:bg-[#2563eb] text-white font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <Plus className="w-4 h-4" /> Add Comment
-                    </button>
-                  </div>
-
-                  {comments.length > 0 ? (
-                    <div className={tableShellClass}>
-                      <table className={tableClass}>
-                        <thead className={theadClass}>
-                          <tr>
-                            <th className={`${thClass} w-36`}>Author</th>
-                            <th className={`${thClass} w-44`}>Date</th>
-                            <th className={thClass}>Comment</th>
-                          </tr>
-                        </thead>
-                        <tbody className={tbodyDivide}>
-                          {comments.map(comment => (
-                            <tr key={comment.id} className="hover:bg-[#f8fafc] align-top">
-                              <td className="px-4 py-3.5 text-xs font-bold text-[#1e293b]">
-                                {comment.author || 'Unknown'}
-                              </td>
-                              <td className="px-4 py-3.5 text-xs text-[#64748b] font-mono whitespace-nowrap">
-                                {new Date(comment.uploadedAt).toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3.5 text-xs text-[#1e293b] font-medium">{comment.content}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 px-4 bg-white rounded-2xl border border-dashed border-[#cbd5e1] text-center">
-                      <img
-                        src="/assets/no-activity.png"
-                        alt="No activity yet"
-                        className="w-56 sm:w-64 h-auto mx-auto mb-3 object-contain"
-                      />
-                      <h4 className="text-base font-bold text-[#1e293b] mb-1">No activity or comments yet</h4>
-                      <p className="text-xs text-[#64748b] max-w-sm mb-5">
-                        No activity updates or internal comments have been posted for this ticket yet. Click below to add a comment.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setIsActivityModalOpen(true)}
-                        className="flex items-center gap-2 px-5 h-10 bg-[#116dff] hover:bg-[#0d5fd9] text-white font-semibold rounded-full text-sm transition-colors shadow-sm cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" /> Add Comment
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <TicketActivityTab
+                  comments={comments}
+                  onOpenAddCommentModal={() => setIsActivityModalOpen(true)}
+                />
               )}
             </div>
             {/* Add Part Drawer */}
