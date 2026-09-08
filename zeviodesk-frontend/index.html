@@ -3,11 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http: https: ws: wss:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: http: https:;">
     <title>Zeviodesk - Super Admin Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Whitelabel Theme Bootstrap: runs synchronously before React mounts for zero-flicker theme paint -->
+    <script>
+      (function () {
+        var tenantKey = location.hostname || 'default';
+        try {
+          var qp = new URLSearchParams(location.search).get('tenant');
+          if (qp) tenantKey = qp;
+        } catch (e) {}
+
+        var cached = null;
+        try {
+          cached = JSON.parse(localStorage.getItem('zevio_theme_' + tenantKey)) ||
+                   JSON.parse(localStorage.getItem('zevio_theme_' + location.hostname));
+        } catch (e) {}
+
+        if (cached && cached.primaryColor) {
+          var root = document.documentElement.style;
+          root.setProperty('--tenant-primary', cached.primaryColor);
+          root.setProperty('--color-primary', cached.primaryColor);
+          root.setProperty('--color-brand', cached.primaryColor);
+          root.setProperty('accent-color', cached.primaryColor);
+          if (cached.logoUrl) root.setProperty('--logo-url', 'url(' + cached.logoUrl + ')');
+          window.__INITIAL_THEME__ = cached;
+        }
+      })();
+    </script>
   </head>
   <body class="bg-[#0B0F17] text-[#E2E8F0] font-['Plus_Jakarta_Sans',sans-serif] antialiased selection:bg-[#D99B26]/30 selection:text-white">
     <div id="root"></div>

@@ -16,6 +16,7 @@ import {
 } from "./invoice.types.js";
 import { Decimal } from "@prisma/client/runtime/library";
 import { randomBytes } from "crypto";
+import { stockMovementService } from "../inventory/stock-movement.service.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 async function requireTicket(ticketId: string, tenantId?: string) {
@@ -32,24 +33,71 @@ export const lineItemService = {
     return lineItemRepository.findByTicketId(ticketId);
   },
 
-  add: async (ticketId: string, dto: CreateLineItemDto, tenantId?: string) => {
+  add: async (ticketId: string, dto: CreateLineItemDto, tenantId?: string, userId?: string) => {
     const ticket = await requireTicket(ticketId, tenantId);
     await assertInvoiceNotFinalized(ticketId);
 
     const calc = calculateLineItem(dto);
+
+    // If inventory-linked: run inside a transaction to atomically save line item + consume stock.
+    // If manual (inventoryItemId is null/undefined): plain insert, no stock logic.
+    if (dto.inventoryItemId) {
+      return prisma.$transaction(async (tx) => {
+        const lineItem = await (tx as any).ticketLineItem.create({
+          data: {
+            ticketId,
+            tenantId:        ticket.tenantId,
+            type:            calc.type,
+            description:     calc.description,
+            quantity:        calc.quantity,
+            unitPrice:       calc.unitPrice,
+            unitCost:        dto.unitCost ?? null,
+            inventoryItemId: dto.inventoryItemId,
+            discountAmount:  calc.discountAmount,
+            subtotal:        calc.subtotal,
+            taxMode:         calc.taxMode,
+            taxRate:         calc.taxRate,
+            taxAmount:       calc.taxAmount,
+            lineTotal:       calc.lineTotal,
+            warrantyEnabled:   calc.warrantyEnabled,
+            warrantyDuration:  calc.warrantyDuration,
+            warrantyUnit:      calc.warrantyUnit,
+            warrantyCoverage:  calc.warrantyCoverage,
+            warrantyStartDate: calc.warrantyStartDate,
+            warrantyEndDate:   calc.warrantyEndDate,
+          },
+        });
+
+        // Consume stock — negative stock is allowed (shows as warning in UI)
+        await stockMovementService.consumeStock(tx, {
+          tenantId:        ticket.tenantId,
+          inventoryItemId: dto.inventoryItemId!,
+          quantity:        Number(calc.quantity),
+          ticketLineItemId: lineItem.id,
+          reference:       ticket.ticketNumber || ticket.jobNumber || undefined,
+          createdById:     userId,
+        });
+
+        return lineItem;
+      });
+    }
+
+    // Manual part — plain insert, no stock interaction
     return lineItemRepository.create({
       ticketId,
-      tenantId: ticket.tenantId,
-      type:          calc.type,
-      description:   calc.description,
-      quantity:      calc.quantity,
-      unitPrice:     calc.unitPrice,
-      discountAmount: calc.discountAmount,
-      subtotal:      calc.subtotal,
-      taxMode:       calc.taxMode,
-      taxRate:       calc.taxRate,
-      taxAmount:     calc.taxAmount,
-      lineTotal:     calc.lineTotal,
+      tenantId:        ticket.tenantId,
+      type:            calc.type,
+      description:     calc.description,
+      quantity:        calc.quantity,
+      unitPrice:       calc.unitPrice,
+      unitCost:        dto.unitCost ?? null,
+      inventoryItemId: null,
+      discountAmount:  calc.discountAmount,
+      subtotal:        calc.subtotal,
+      taxMode:         calc.taxMode,
+      taxRate:         calc.taxRate,
+      taxAmount:       calc.taxAmount,
+      lineTotal:       calc.lineTotal,
       // Warranty snapshot
       warrantyEnabled:   calc.warrantyEnabled,
       warrantyDuration:  calc.warrantyDuration,
@@ -64,9 +112,10 @@ export const lineItemService = {
     ticketId: string,
     lineItemId: string,
     dto: UpdateLineItemDto,
-    tenantId?: string
+    tenantId?: string,
+    userId?: string
   ) => {
-    await requireTicket(ticketId, tenantId);
+    const ticket = await requireTicket(ticketId, tenantId);
     await assertInvoiceNotFinalized(ticketId);
 
     const existing = await lineItemRepository.findById(lineItemId);
@@ -78,6 +127,8 @@ export const lineItemService = {
       description:   dto.description ?? existing.description,
       quantity:      Number(dto.quantity ?? existing.quantity),
       unitPrice:     Number(dto.unitPrice ?? existing.unitPrice),
+      unitCost:      dto.unitCost ?? (existing as any).unitCost ?? undefined,
+      inventoryItemId: (existing as any).inventoryItemId ?? undefined,
       discountAmount: Number(dto.discountAmount ?? existing.discountAmount ?? 0),
       taxMode:       (dto.taxMode ?? existing.taxMode ?? "NONE") as any,
       taxRate:       Number(dto.taxRate ?? existing.taxRate ?? 0),
@@ -90,11 +141,61 @@ export const lineItemService = {
     };
 
     const calc = calculateLineItem(merged);
+    const inventoryItemId = (existing as any).inventoryItemId as string | null;
+
+    // If inventory-linked and quantity changed: adjust stock by delta
+    if (inventoryItemId) {
+      const existingQty = Number(existing.quantity);
+      const newQty      = Number(calc.quantity);
+
+      return prisma.$transaction(async (tx) => {
+        const updated = await (tx as any).ticketLineItem.update({
+          where: { id: lineItemId },
+          data: {
+            type:            calc.type,
+            description:     calc.description,
+            quantity:        calc.quantity,
+            unitPrice:       calc.unitPrice,
+            unitCost:        merged.unitCost ?? null,
+            discountAmount:  calc.discountAmount,
+            subtotal:        calc.subtotal,
+            taxMode:         calc.taxMode,
+            taxRate:         calc.taxRate,
+            taxAmount:       calc.taxAmount,
+            lineTotal:       calc.lineTotal,
+            warrantyEnabled:   calc.warrantyEnabled,
+            warrantyDuration:  calc.warrantyDuration,
+            warrantyUnit:      calc.warrantyUnit,
+            warrantyCoverage:  calc.warrantyCoverage,
+            warrantyStartDate: calc.warrantyStartDate,
+            warrantyEndDate:   calc.warrantyEndDate,
+          },
+        });
+
+        // Only adjust stock if quantity actually changed
+        if (existingQty !== newQty) {
+          await stockMovementService.adjustByDelta(tx, {
+            tenantId:        ticket.tenantId,
+            inventoryItemId,
+            existingQuantity: existingQty,
+            newQuantity:      newQty,
+            ticketLineItemId: lineItemId,
+            reference:        ticket.ticketNumber || ticket.jobNumber || undefined,
+            createdById:      userId,
+          });
+        }
+
+        return updated;
+      });
+    }
+
+    // Manual part — plain update, no stock interaction
     return lineItemRepository.update(lineItemId, {
       type:           calc.type,
       description:    calc.description,
       quantity:       calc.quantity,
       unitPrice:      calc.unitPrice,
+      unitCost:       merged.unitCost ?? null,
       discountAmount: calc.discountAmount,
       subtotal:       calc.subtotal,
       taxMode:        calc.taxMode,
@@ -110,15 +211,80 @@ export const lineItemService = {
     });
   },
 
-  remove: async (ticketId: string, lineItemId: string, tenantId?: string) => {
-    await requireTicket(ticketId, tenantId);
+  remove: async (ticketId: string, lineItemId: string, tenantId?: string, userId?: string) => {
+    const ticket = await requireTicket(ticketId, tenantId);
     await assertInvoiceNotFinalized(ticketId);
 
     const existing = await lineItemRepository.findById(lineItemId);
     if (!existing || existing.ticketId !== ticketId) throw new NotFoundError("Line item not found");
 
-    await lineItemRepository.delete(lineItemId);
-    return { id: lineItemId };
+    const inventoryItemId = (existing as any).inventoryItemId as string | null;
+
+    return prisma.$transaction(async (tx) => {
+      // 1. Delete associated payment intake records if this part had payments recorded
+      const descLower = existing.description.toLowerCase();
+      const relatedPayments = await tx.payment.findMany({
+        where: { ticketId, type: "PARTS" },
+      });
+
+      const partLineItems = await tx.ticketLineItem.findMany({
+        where: { ticketId, type: "PART" },
+      });
+
+      let matchingPayments = relatedPayments.filter((p) => {
+        if (!p.notes) return false;
+        const noteLower = p.notes.toLowerCase();
+        return (
+          noteLower.includes(descLower) ||
+          descLower.includes(noteLower.replace("part payment:", "").trim())
+        );
+      });
+
+      // Fallback: If 1 part payment and 1 part line item on the ticket
+      if (matchingPayments.length === 0 && relatedPayments.length > 0 && partLineItems.length === 1) {
+        matchingPayments = relatedPayments;
+      }
+
+      for (const p of matchingPayments) {
+        await tx.payment.delete({ where: { id: p.id } });
+      }
+
+      // 2. Delete the line item
+      await (tx as any).ticketLineItem.delete({ where: { id: lineItemId } });
+
+      // 3. Return stock if inventory linked
+      if (inventoryItemId) {
+        await stockMovementService.returnStock(tx, {
+          tenantId:        ticket.tenantId,
+          inventoryItemId,
+          quantity:        Number(existing.quantity),
+          ticketLineItemId: lineItemId,
+          reference:       ticket.ticketNumber || ticket.jobNumber || undefined,
+          reason:          "Part removed from ticket",
+          createdById:     userId,
+        });
+      }
+
+      // 4. Recalculate invoice / ticket payment totals if invoice exists
+      const allRemainingPayments = await tx.payment.findMany({ where: { ticketId } });
+      const amountPaid = computeNetPaid(allRemainingPayments);
+      const dbInvoice = await tx.invoice.findUnique({ where: { ticketId } });
+      if (dbInvoice) {
+        const balanceDue = Decimal.max(0, dbInvoice.total.minus(amountPaid));
+        let pStatus: "UNPAID" | "PARTIAL" | "PAID" = "UNPAID";
+        if (amountPaid.greaterThanOrEqualTo(dbInvoice.total) && dbInvoice.total.greaterThan(0)) {
+          pStatus = "PAID";
+        } else if (amountPaid.greaterThan(0)) {
+          pStatus = "PARTIAL";
+        }
+        await tx.invoice.update({
+          where: { id: dbInvoice.id },
+          data: { amountPaid, balanceDue, paymentStatus: pStatus },
+        });
+      }
+
+      return { id: lineItemId, deletedPaymentsCount: matchingPayments.length };
+    });
   },
 };
 
@@ -308,11 +474,14 @@ export const invoiceService = {
         data:  { invoiceId: invoice.id },
       });
 
-      // 10. Sync legacy ticket financial fields. A ticket remains in its
-      // operational status (for example READY_FOR_PICKUP) until staff deliver it.
+      // 10. Sync ticket financial fields and transition operational status to READY_FOR_PICKUP
+      const nextStatus = ticket.status === "DELIVERED" ? "DELIVERED" : "READY_FOR_PICKUP";
+      const statusChanged = ticket.status !== nextStatus;
+
       await tx.ticket.update({
         where: { id: ticketId },
         data: {
+          status:        nextStatus,
           totalAmount:   parseFloat(totals.total.toFixed(2)),
           tax:           parseFloat(totals.tax.toFixed(2)),
           invoiceNumber,
@@ -322,19 +491,32 @@ export const invoiceService = {
         },
       });
 
+      if (statusChanged) {
+        await tx.ticketStatusHistory.create({
+          data: {
+            ticketId,
+            status: "READY_FOR_PICKUP",
+            customerNote: `Invoice ${invoiceNumber} generated for ${totals.total.toFixed(2)}. Device is ready for customer pickup.`,
+            createdById: userId,
+          },
+        });
+      }
+
       return invoice;
     });
   },
 
-  /** Get finalized invoice (or draft summary) for a ticket */
   getForTicket: async (ticketId: string, tenantId?: string) => {
     await requireTicket(ticketId, tenantId);
     const invoice = await invoiceRepository.findByTicketId(ticketId);
-    if (!invoice) {
-      // Return live draft summary instead
+    if (!invoice || (invoice.status !== "FINALIZED" && invoice.status !== "VOID")) {
+      // Return live draft summary for unfinalized invoices
       return invoiceService.getDraftSummary(ticketId, tenantId);
     }
-    return invoice;
+    return {
+      ...invoice,
+      lineItems: (invoice.lineItemsSnapshot as any) || [],
+    };
   },
 
   getByNumber: async (invoiceNumber: string, tenantId: string) => {

@@ -6,6 +6,8 @@ export interface CreateLineItemDto {
   description: string;
   quantity: number;
   unitPrice: number;
+  unitCost?: number;          // Optional acquisition cost (for profitability reports)
+  inventoryItemId?: string;  // Nullable — null/undefined = manual part
   discountAmount?: number;
   taxMode?: TaxMode;
   taxRate?: number;

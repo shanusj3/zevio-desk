@@ -1,5 +1,5 @@
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phoneRegex = /^\+\d+\s\d{10}$/;
+const phoneRegex = /^[\+\d\s\-\(\)]{7,30}$/;
 const subdomainRegex = /^[a-z0-9-]+$/;
 
 export function validateTenantPayload(body: any, isUpdate = false) {

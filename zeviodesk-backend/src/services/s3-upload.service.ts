@@ -12,11 +12,36 @@ const s3Client = new S3Client({
 
 const S3_BUCKET = process.env.AWS_S3_BUCKET || "zevio-desk-uploads";
 
-function getPublicUrl(key: string): string {
-  const baseUrl = process.env.AWS_S3_PUBLIC_BASE_URL
-    ? process.env.AWS_S3_PUBLIC_BASE_URL
-    : `https://${S3_BUCKET}.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com`;
-  return `${baseUrl}/${key}`;
+export function extractObjectKey(urlOrKey: string | null | undefined): string | null {
+  if (!urlOrKey) return null;
+  if (urlOrKey.startsWith("data:") || urlOrKey.startsWith("blob:")) {
+    return urlOrKey;
+  }
+  if (urlOrKey.startsWith("http://") || urlOrKey.startsWith("https://")) {
+    try {
+      const parsed = new URL(urlOrKey);
+      return parsed.pathname.replace(/^\//, "");
+    } catch {
+      return urlOrKey;
+    }
+  }
+  return urlOrKey;
+}
+
+export function getPublicUrl(keyOrUrl: string | null | undefined): string | null {
+  if (!keyOrUrl) return null;
+  if (keyOrUrl.startsWith("data:") || keyOrUrl.startsWith("blob:") || keyOrUrl.startsWith("http://") || keyOrUrl.startsWith("https://")) {
+    return keyOrUrl;
+  }
+  const relativeKey = extractObjectKey(keyOrUrl);
+  if (!relativeKey) return null;
+
+  const baseUrl = (
+    process.env.AWS_S3_PUBLIC_BASE_URL ||
+    `https://${S3_BUCKET}.s3.${process.env.AWS_REGION || "us-east-1"}.amazonaws.com`
+  ).replace(/\/$/, "");
+
+  return `${baseUrl}/${relativeKey.replace(/^\//, "")}`;
 }
 
 export async function generatePresignedUpload(

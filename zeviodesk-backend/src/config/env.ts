@@ -39,4 +39,9 @@ export const env = {
   ENCRYPTION_KEY: getSecret("ENCRYPTION_KEY"),
   ALLOWED_ORIGIN: process.env.ALLOWED_ORIGIN || "http://localhost:3000",
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3000",
+
+  META_APP_SECRET: process.env.META_APP_SECRET || "zevio_meta_app_secret",
+  WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN || "zevio_verify_token",
+  META_APP_ID: process.env.META_APP_ID || "dev_meta_app_id",
+  META_CONFIG_ID: process.env.META_CONFIG_ID || "dev_meta_config_id",
 };

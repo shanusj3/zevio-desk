@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, UserCheck, Phone, Mail, Award, Trash2, Pencil, Key } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, UserCheck, Phone, Mail, Trash2, Pencil, MoreVertical } from 'lucide-react';
 import { TenantUser } from '../lib/api';
 import { useUsersQuery } from '../hooks/useUsersQuery';
 import { TableRowSkeleton } from './Skeleton';
@@ -7,14 +7,21 @@ import { TableRowSkeleton } from './Skeleton';
 interface EmployeesTableProps {
   onEditEmployee: (employee: TenantUser) => void;
   onDeleteEmployee: (employee: TenantUser) => void;
+  onTotalCountChange?: (count: number) => void;
 }
 
 export const EmployeesTable: React.FC<EmployeesTableProps> = ({
   onEditEmployee,
   onDeleteEmployee,
+  onTotalCountChange,
 }) => {
   const [searchInput, setSearchInput] = useState('');
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
   const { data: employees = [], isLoading } = useUsersQuery(true);
+
+  useEffect(() => {
+    onTotalCountChange?.(employees.length);
+  }, [employees.length, onTotalCountChange]);
 
   const filteredEmployees = employees.filter((employee) => {
     const searchLower = searchInput.toLowerCase();
@@ -29,45 +36,45 @@ export const EmployeesTable: React.FC<EmployeesTableProps> = ({
   const getRoleBadgeColor = (role: TenantUser['role']) => {
     switch (role) {
       case 'TENANT_ADMIN':
-        return 'bg-[#7F1D1D]/80 text-[#F87171] border border-[#DC2626]/30';
+        return 'bg-red-50 text-red-700 border border-red-200/60';
       case 'MANAGER':
-        return 'bg-[#78350F]/80 text-[#FCD34D] border border-[#D97706]/30';
+        return 'bg-amber-50 text-amber-700 border border-amber-200/60';
       case 'TECHNICIAN':
-        return 'bg-[#1E3A8A]/80 text-[#93C5FD] border border-[#2563EB]/30';
+        return 'bg-blue-50 text-blue-700 border border-blue-200/60';
       case 'ADVISOR':
       default:
-        return 'bg-[#064E3B]/80 text-[#34D399] border border-[#059669]/30';
+        return 'bg-emerald-50 text-emerald-700 border border-emerald-200/60';
     }
   };
 
   const getStatusColor = (status: TenantUser['status']) => {
     switch (status) {
       case 'ACTIVE':
-        return 'bg-[#064E3B]/80 text-[#34D399] border border-[#059669]/30';
+        return 'bg-emerald-50 text-emerald-700 border border-emerald-200/60';
       case 'INACTIVE':
-        return 'bg-[#1e293b]/80 text-[#94a3b8] border border-[#334155]/30';
+        return 'bg-slate-100 text-slate-600 border border-slate-200/60';
       case 'SUSPENDED':
       default:
-        return 'bg-[#7F1D1D]/80 text-[#F87171] border border-[#DC2626]/30';
+        return 'bg-red-50 text-red-700 border border-red-200/60';
     }
   };
 
   return (
-    <div className="bg-[#101622] border border-[#1b2536] rounded-lg shadow-xl overflow-hidden">
-      {/* Search Bar */}
-      <div className="p-5 border-b border-[#1b2536] flex items-center justify-between">
-        <h3 className="text-lg font-bold text-white tracking-tight">
-          Shop Staff & Employees
-        </h3>
-        <div className="relative w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B]" />
-          <input
-            type="text"
-            placeholder="Search staff..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full h-11 bg-[#162030] border border-[#22314a] rounded-lg pl-10 pr-4 text-xs text-white placeholder-[#64748B] focus:outline-none focus:border-[#D99B26] transition-colors"
-          />
+    <div className="bg-white border border-[#e2e8f0] rounded-xl shadow-sm overflow-hidden">
+      {/* Top Header Controls Bar (Matching Ready For Pickup table) */}
+      <div className="p-3 px-4 border-b border-[#e2e8f0]">
+        <div className="flex justify-end">
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#116dff]" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-48 md:w-64 h-9 bg-white border border-[#e2e8f0] rounded-full pl-9 pr-4 text-sm text-[#1e293b] placeholder-[#94a3b8] focus:outline-none focus:border-[#116dff] transition-colors"
+            />
+          </div>
         </div>
       </div>
 
@@ -75,7 +82,7 @@ export const EmployeesTable: React.FC<EmployeesTableProps> = ({
       <div className="overflow-x-auto min-h-[360px]">
         <table className="w-full text-left text-xs min-w-[800px]">
           <thead>
-            <tr className="border-b border-[#1b2536] bg-[#0c111a]/60 text-[#64748B] uppercase tracking-wider font-semibold whitespace-nowrap">
+            <tr className="border-b border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] uppercase tracking-wider font-semibold whitespace-nowrap">
               <th className="py-3.5 px-5">Employee Name</th>
               <th className="py-3.5 px-5">Role</th>
               <th className="py-3.5 px-5">Status</th>
@@ -84,7 +91,7 @@ export const EmployeesTable: React.FC<EmployeesTableProps> = ({
               <th className="py-3.5 px-5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1b2536]/80 text-[#CBD5E1]">
+          <tbody className="divide-y divide-[#e2e8f0] text-[#334155]">
             {isLoading ? (
               <>
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -95,10 +102,10 @@ export const EmployeesTable: React.FC<EmployeesTableProps> = ({
               <tr>
                 <td colSpan={6} className="py-16 text-center">
                   <div className="flex flex-col items-center justify-center space-y-3">
-                    <div className="w-16 h-16 bg-[#162030] rounded-full flex items-center justify-center border border-[#22314a]">
-                      <UserCheck className="w-8 h-8 text-[#D99B26]" />
+                    <div className="w-16 h-16 bg-[#f1f5f9] rounded-full flex items-center justify-center border border-[#e2e8f0]">
+                      <UserCheck className="w-8 h-8 text-[#116dff]" />
                     </div>
-                    <div className="text-sm font-medium text-[#E2E8F0]">
+                    <div className="text-sm font-medium text-[#1e293b]">
                       No employees found
                     </div>
                   </div>
@@ -106,65 +113,99 @@ export const EmployeesTable: React.FC<EmployeesTableProps> = ({
               </tr>
             ) : (
               filteredEmployees.map((employee) => (
-                <tr key={employee.id} className="hover:bg-[#151d2d]/80 transition-colors">
-                  <td className="py-3.5 px-5 font-semibold text-white">
+                <tr key={employee.id} className="hover:bg-[#f8fafc] transition-colors whitespace-nowrap">
+                  <td className="py-3.5 px-5 font-semibold text-[#1e293b]">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#162030] border border-[#22314a] flex items-center justify-center text-[#94A3B8] font-bold">
+                      <div className="w-8 h-8 rounded-full bg-[#116dff]/10 border border-[#116dff]/20 flex items-center justify-center text-[#116dff] font-bold text-xs">
                         {employee.name.substring(0, 2).toUpperCase()}
                       </div>
-                      <span>{employee.name}</span>
+                      <span className="text-sm font-semibold text-[#1e293b]">{employee.name}</span>
                     </div>
                   </td>
                   <td className="py-3.5 px-5">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase ${getRoleBadgeColor(employee.role)}`}>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getRoleBadgeColor(employee.role)}`}>
                       {employee.role.replace('TENANT_', '')}
                     </span>
                   </td>
                   <td className="py-3.5 px-5">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${getStatusColor(employee.status)}`}>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(employee.status)}`}>
                       <span className={`w-1 h-1 rounded-full ${
                         employee.status === 'ACTIVE'
-                          ? 'bg-[#34D399]'
+                          ? 'bg-emerald-500'
                           : employee.status === 'INACTIVE'
-                          ? 'bg-[#94A3B8]'
-                          : 'bg-[#F87171]'
+                          ? 'bg-slate-400'
+                          : 'bg-red-500'
                       }`} />
                       {employee.status}
                     </span>
                   </td>
                   <td className="py-3.5 px-5">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-[#CBD5E1]">
-                        <Mail className="w-3.5 h-3.5 text-[#64748B]" />
-                        <span className="font-mono text-[11px]">{employee.email}</span>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-[#64748B]">
+                        <Mail className="w-3.5 h-3.5 text-[#116dff]" />
+                        <span className="font-semibold text-xs text-[#334155]">{employee.email}</span>
                       </div>
                       {employee.phone && (
-                        <div className="flex items-center gap-1.5 text-[#CBD5E1]">
-                          <Phone className="w-3.5 h-3.5 text-[#64748B]" />
-                          <span className="font-mono text-[11px]">{employee.phone}</span>
+                        <div className="flex items-center gap-1.5 text-[#64748B]">
+                          <Phone className="w-3.5 h-3.5 text-[#116dff]" />
+                          <span className="font-mono font-semibold text-xs text-[#334155]">{employee.phone}</span>
                         </div>
                       )}
                     </div>
                   </td>
-                  <td className="py-3.5 px-5 text-[#94A3B8] font-mono">
+                  <td className="py-3.5 px-5 text-[#64748B] font-mono">
                     {employee.maxConcurrentJobs ? `${employee.maxConcurrentJobs} Active Jobs` : 'Unlimited'}
                   </td>
+                  
+                  {/* Actions Dropdown (Matching CustomersTable) */}
                   <td className="py-3.5 px-5 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => onEditEmployee(employee)}
-                        className="p-1.5 text-[#94A3B8] hover:text-white hover:bg-[#1e2a40] rounded-lg transition-colors"
-                        title="Edit Details"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onDeleteEmployee(employee)}
-                        className="p-1.5 text-[#EF4444] hover:bg-[#EF4444]/10 rounded-lg transition-colors"
-                        title="Delete Employee"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveActionMenuId(
+                              activeActionMenuId === employee.id ? null : employee.id
+                            );
+                          }}
+                          className="w-8 h-8 flex items-center justify-center border border-[#e2e8f0] hover:border-[#116dff] text-[#116dff] hover:bg-[#116dff]/5 rounded-full transition-colors cursor-pointer"
+                          title="More Actions"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+
+                        {activeActionMenuId === employee.id && (
+                          <div
+                            className="absolute right-0 mt-1 w-40 bg-white border border-[#e2e8f0] rounded-lg shadow-2xl z-50 p-1.5 text-left animate-in fade-in zoom-in-95"
+                            onMouseLeave={() => setActiveActionMenuId(null)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditEmployee(employee);
+                                setActiveActionMenuId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#475569] hover:text-[#1e293b] hover:bg-[#f1f5f9] rounded-md transition-colors cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Edit Employee
+                            </button>
+                            <div className="my-1 border-t border-[#e2e8f0]" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteEmployee(employee);
+                                setActiveActionMenuId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#EF4444] hover:bg-[#EF4444]/10 rounded-md transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete Employee
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -174,9 +215,9 @@ export const EmployeesTable: React.FC<EmployeesTableProps> = ({
         </table>
       </div>
 
-      <div className="p-4 border-t border-[#1b2536] text-xs text-[#64748B]">
-        Showing <span className="font-semibold text-white">{filteredEmployees.length}</span> of{' '}
-        <span className="font-semibold text-white">{employees.length}</span> employees
+      <div className="p-4 border-t border-[#e2e8f0] text-xs text-[#64748B]">
+        Showing <span className="font-semibold text-[#1e293b]">{filteredEmployees.length}</span> of{' '}
+        <span className="font-semibold text-[#1e293b]">{employees.length}</span> employees
       </div>
     </div>
   );

@@ -42,20 +42,20 @@ export const BillingDomainView: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
       {/* Domain Navigation Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#1b2536] pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#e2e8f0] pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Billing & Invoicing</h1>
-          <p className="text-xs text-[#94A3B8] mt-1">Top-level domain for invoices, payments, and financial management</p>
+          <h1 className="text-2xl font-bold text-[#1e293b] tracking-tight">Billing & Invoicing</h1>
+          <p className="text-xs text-[#64748B] mt-1">Top-level domain for invoices, payments, and financial management</p>
         </div>
 
         {/* Domain Sub-Navigation Tabs */}
-        <div className="flex gap-1 rounded-xl border border-white/[0.07] bg-[#0d1322] p-1 shrink-0">
+        <div className="flex gap-1 rounded-xl border border-[#e2e8f0] bg-white p-1 shrink-0 shadow-sm">
           <button
             onClick={() => navigate(billingInvoicesPath())}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               route.section === 'invoices'
-                ? 'bg-[#D99B26] text-[#0d121c] shadow'
-                : 'text-[#64748B] hover:text-white'
+                ? 'bg-[#116dff] text-white shadow'
+                : 'text-[#64748B] hover:text-[#1e293b]'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -65,8 +65,8 @@ export const BillingDomainView: React.FC = () => {
             onClick={() => navigate(billingPaymentsPath())}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               route.section === 'payments'
-                ? 'bg-[#D99B26] text-[#0d121c] shadow'
-                : 'text-[#64748B] hover:text-white'
+                ? 'bg-[#116dff] text-white shadow'
+                : 'text-[#64748B] hover:text-[#1e293b]'
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
@@ -76,8 +76,8 @@ export const BillingDomainView: React.FC = () => {
             onClick={() => navigate(billingRefundsPath())}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               route.section === 'refunds'
-                ? 'bg-[#D99B26] text-[#0d121c] shadow'
-                : 'text-[#64748B] hover:text-white'
+                ? 'bg-[#116dff] text-white shadow'
+                : 'text-[#64748B] hover:text-[#1e293b]'
             }`}
           >
             <RefreshCw className="w-3.5 h-3.5" />
@@ -85,7 +85,7 @@ export const BillingDomainView: React.FC = () => {
           </button>
           <button
             onClick={() => navigate(billingOutstandingPath())}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${route.section === 'outstanding' ? 'bg-[#D99B26] text-[#0d121c] shadow' : 'text-[#64748B] hover:text-white'}`}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${route.section === 'outstanding' ? 'bg-[#116dff] text-white shadow' : 'text-[#64748B] hover:text-[#1e293b]'}`}
           >
             Outstanding
           </button>

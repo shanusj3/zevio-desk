@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AlertCircle, ChevronDown, Loader2, Mail, MapPin, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Customer } from '../lib/api';
 import { useCreateCustomerMutation, useUpdateCustomerMutation } from '../hooks/useCustomersQuery';
 import { useAppStore } from '../store/useAppStore';
@@ -8,6 +9,7 @@ interface CreateCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
   customerToEdit: Customer | null;
+  initialData?: { name?: string; phone?: string } | null;
   onCreated?: (customer: Customer) => void;
 }
 
@@ -16,23 +18,67 @@ const emptyForm = {
   customerType: 'WALK_IN' as Customer['customerType'], notes: '',
 };
 
-export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ isOpen, onClose, customerToEdit, onCreated }) => {
+export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ isOpen, onClose, customerToEdit, initialData, onCreated }) => {
   const { showToast } = useAppStore();
   const createMutation = useCreateCustomerMutation();
   const updateMutation = useUpdateCustomerMutation();
   const [formData, setFormData] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Prefix dropdown state
+  const [phonePrefix, setPhonePrefix] = useState('+91');
+  const [whatsappPrefix, setWhatsappPrefix] = useState('+91');
 
   useEffect(() => {
-    setFormData(customerToEdit ? {
-      name: customerToEdit.name, email: customerToEdit.email || '', phone: customerToEdit.phone || '',
-      whatsappId: customerToEdit.whatsappId || '', address: customerToEdit.address || '',
-      customerType: customerToEdit.customerType, notes: customerToEdit.notes || '',
-    } : emptyForm);
-    setError(null);
-  }, [customerToEdit, isOpen]);
+    const handleClickOutside = (e: MouseEvent) => {
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(e.target as Node)) {
+        setTypeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (customerToEdit) {
+      // Parse phone country code
+      const phoneMatch = customerToEdit.phone?.match(/^(\+\d+)\s*(.*)$/);
+      const parsedPhonePrefix = phoneMatch ? phoneMatch[1] : '+91';
+      const parsedPhoneBody = phoneMatch ? phoneMatch[2] : (customerToEdit.phone || '');
+
+      // Parse whatsapp country code
+      const whatsappMatch = customerToEdit.whatsappId?.match(/^(\+\d+)\s*(.*)$/);
+      const parsedWhatsappPrefix = whatsappMatch ? whatsappMatch[1] : '+91';
+      const parsedWhatsappBody = whatsappMatch ? whatsappMatch[2] : (customerToEdit.whatsappId || '');
+
+      setPhonePrefix(parsedPhonePrefix);
+      setWhatsappPrefix(parsedWhatsappPrefix);
+      setFormData({
+        name: customerToEdit.name,
+        email: customerToEdit.email || '',
+        phone: parsedPhoneBody,
+        whatsappId: parsedWhatsappBody,
+        address: customerToEdit.address || '',
+        customerType: customerToEdit.customerType,
+        notes: customerToEdit.notes || '',
+      });
+    } else {
+      setPhonePrefix('+91');
+      setWhatsappPrefix('+91');
+      setFormData({
+        name: initialData?.name || '',
+        email: '',
+        phone: initialData?.phone || '',
+        whatsappId: '',
+        address: '',
+        customerType: 'WALK_IN',
+        notes: '',
+      });
+    }
+    setError(null);
+  }, [customerToEdit, initialData, isOpen]);
 
   const changeField = (field: keyof typeof formData, value: string) => {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -43,10 +89,18 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ isOpen
     event.preventDefault();
     if (!formData.name.trim()) return setError('Full name is required');
     if (!formData.phone.trim() && !formData.email.trim()) return setError('Add a phone number or email address');
+    
+    const fullPhone = formData.phone.trim() ? `${phonePrefix} ${formData.phone.trim()}` : null;
+    const fullWhatsapp = formData.whatsappId.trim() ? `${whatsappPrefix} ${formData.whatsappId.trim()}` : null;
+
     const payload = {
-      name: formData.name.trim(), email: formData.email.trim() || null, phone: formData.phone.trim() || null,
-      whatsappId: formData.whatsappId.trim() || null, address: formData.address.trim() || null,
-      customerType: formData.customerType, notes: formData.notes.trim() || null,
+      name: formData.name.trim(),
+      email: formData.email.trim() || null,
+      phone: fullPhone,
+      whatsappId: fullWhatsapp,
+      address: formData.address.trim() || null,
+      customerType: formData.customerType,
+      notes: formData.notes.trim() || null,
     };
     try {
       if (customerToEdit) {
@@ -65,62 +119,264 @@ export const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({ isOpen
   };
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const labelStyle = 'block text-sm font-medium text-[#c8cad3]';
-  const inputStyle = 'h-[58px] w-full rounded-xl border border-white/[0.035] bg-[#303748] px-5 text-sm text-white placeholder:text-[#a4a8b5] outline-none transition focus:border-[#d8ab4d] focus:ring-2 focus:ring-[#d8ab4d]/15';
+  const phoneIsComplete = formData.phone.trim().length >= 10;
+  const labelStyle = 'block text-sm font-medium text-[#334155]';
+  const inputStyle = 'h-[58px] w-full rounded-xl border border-[#cbd5e1] bg-white px-5 text-sm text-[#1e293b] placeholder:text-[#94a3b8] outline-none transition focus:border-[#116dff] focus:ring-2 focus:ring-[#116dff]/15';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-2 sm:items-center sm:p-6">
-      <button aria-label="Close dialog" className="fixed inset-0 cursor-default bg-black/80 backdrop-blur-[2px]" onClick={onClose} />
-      <section role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title" className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-[850px] flex-col overflow-hidden rounded-lg sm:max-h-[calc(100dvh-3rem)] border border-white/[0.06] bg-[linear-gradient(135deg,#232a3a_0%,#1b212e_100%)] shadow-2xl shadow-black/60">
-        <div className="flex shrink-0 items-center justify-between px-5 pt-5 sm:px-9 sm:pt-7">
-          <h2 id="customer-dialog-title" className="text-[22px] font-semibold tracking-tight text-white">{customerToEdit ? 'Edit customer' : 'Add customer'}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 text-[#aeb3c0] transition hover:bg-white/10 hover:text-white"><X className="size-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-9 sm:py-6">
-          {error && <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-400/30 bg-red-950/30 p-3 text-sm text-red-200"><AlertCircle className="size-4 shrink-0" />{error}</div>}
-            <div className="grid grid-cols-1 gap-x-8 gap-y-8 md:grid-cols-2">
-            <div className="space-y-3 md:col-span-2">
-              <label htmlFor="customer-name" className={labelStyle}>Full Name <span className="text-[#e5bb5e]">*</span></label>
-              <input id="customer-name" value={formData.name} onChange={(e) => changeField('name', e.target.value)} placeholder="Enter full name" className={inputStyle} autoFocus />
-            </div>
-            <div className="space-y-3">
-              <label htmlFor="customer-phone" className={labelStyle}>Phone Number <span className="text-[#e5bb5e]">*</span></label>
-              <div className="flex h-[58px] overflow-hidden rounded-xl border border-white/[0.035] bg-[#303748] focus-within:border-[#d8ab4d] focus-within:ring-2 focus-within:ring-[#d8ab4d]/15"><span className="flex w-[68px] items-center justify-center border-r border-black/10 text-sm font-semibold text-white">+91</span><input id="customer-phone" value={formData.phone} onChange={(e) => changeField('phone', e.target.value)} placeholder="Enter phone number" className="min-w-0 flex-1 bg-transparent px-5 text-sm text-white placeholder:text-[#a4a8b5] outline-none" inputMode="tel" /></div>
-            </div>
-            <div className="space-y-3">
-              <label htmlFor="customer-alternate-phone" className={labelStyle}>Additional Mobile Number</label>
-              <div className="flex h-[58px] overflow-hidden rounded-xl border border-white/[0.035] bg-[#303748] focus-within:border-[#d8ab4d] focus-within:ring-2 focus-within:ring-[#d8ab4d]/15"><span className="flex w-[68px] items-center justify-center border-r border-black/10 text-sm font-semibold text-white">+91</span><input id="customer-alternate-phone" value={formData.whatsappId} onChange={(e) => changeField('whatsappId', e.target.value)} placeholder="Enter additional mobile number" className="min-w-0 flex-1 bg-transparent px-5 text-sm text-white placeholder:text-[#a4a8b5] outline-none" inputMode="tel" /></div>
-            </div>
-            <div className="space-y-3">
-              <label htmlFor="customer-email" className={labelStyle}>Email Address <span className="text-[#a4a8b5]">(optional)</span></label>
-              <div className="relative"><Mail className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-[#c4c8d1]" /><input id="customer-email" type="email" value={formData.email} onChange={(e) => changeField('email', e.target.value)} placeholder="Enter email address" className={`${inputStyle} pl-14`} /></div>
-            </div>
-            <div className="space-y-3">
-              <label htmlFor="customer-type" className={labelStyle}>Customer Type</label>
-              <div className="relative"><select id="customer-type" value={formData.customerType} onChange={(e) => changeField('customerType', e.target.value)} className={`${inputStyle} appearance-none pr-12`}><option value="WALK_IN">Walk-in Customer</option><option value="RETURNING">Returning Customer</option><option value="BUSINESS">Business Account</option></select><ChevronDown className="pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-[#e5bb5e]" /></div>
-              <p className="text-xs leading-5 text-[#a4a8b5]">Used to group customers in the customer list. Leave the default for regular walk-in customers.</p>
-            </div>
-            <div className="space-y-3">
-              <label htmlFor="customer-notes" className={labelStyle}>Internal Notes <span className="text-[#a4a8b5]">(optional)</span></label>
-              <textarea id="customer-notes" value={formData.notes} onChange={(e) => changeField('notes', e.target.value)} placeholder="Add notes for your team" className={`${inputStyle} h-[96px] resize-y py-4`} />
-            </div>
-            <div className="space-y-3">
-              <label htmlFor="customer-location" className={labelStyle}>Location <span className="text-[#a4a8b5]">(optional)</span></label>
-              <div className="relative"><MapPin className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-[#c4c8d1]" /><input id="customer-location" value={formData.address} onChange={(e) => changeField('address', e.target.value)} placeholder="Enter location" className={`${inputStyle} pl-14`} /></div>
-            </div>
-            </div>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="fixed top-12 right-0 bottom-0 w-full max-w-2xl bg-white border-l border-[#e2e8f0] flex flex-col shadow-2xl z-40"
+        >
+          {/* Header */}
+          <div className="flex shrink-0 items-center justify-between px-6 py-5 border-b border-[#e2e8f0]">
+            <h2 className="text-lg font-bold tracking-tight text-[#1e293b]">
+              {customerToEdit ? 'Edit Customer' : 'Add Customer'}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md p-1.5 text-[#64748B] transition hover:bg-[#f1f5f9] hover:text-[#1e293b] cursor-pointer"
+            >
+              <X className="size-5" />
+            </button>
           </div>
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-white/[0.06] bg-[#1b212e] px-5 py-5 sm:px-9 sm:py-6">
-            <button type="button" onClick={onClose} className="h-[54px] min-w-[130px] rounded-xl border border-[#d3a944] px-7 text-sm font-semibold text-[#e5bb5e] transition hover:bg-[#d3a944]/10">Cancel</button>
-            <button type="submit" disabled={isSubmitting} className="flex h-[54px] min-w-[162px] items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#f0cd77_0%,#d9a743_100%)] px-7 text-sm font-bold text-[#17191e] shadow-lg shadow-[#d9a743]/10 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting && <Loader2 className="size-4 animate-spin" />}{customerToEdit ? 'Save Changes' : 'Submit'}</button>
-          </div>
-        </form>
-      </section>
-    </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+              {error && (
+                <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle className="size-4 shrink-0" />
+                  {error}
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2">
+
+                {/* Full Name */}
+                <div className="space-y-2.5 md:col-span-2">
+                  <label htmlFor="customer-name" className={labelStyle}>
+                    Full Name <span className="text-[#116dff]">*</span>
+                  </label>
+                  <input
+                    id="customer-name"
+                    value={formData.name}
+                    onChange={(e) => changeField('name', e.target.value)}
+                    placeholder="Enter full name"
+                    className={inputStyle}
+                    autoFocus
+                  />
+                </div>
+
+                {/* Phone Number */}
+                <div className="space-y-2.5">
+                  <label htmlFor="customer-phone" className={labelStyle}>
+                    Phone Number <span className="text-[#116dff]">*</span>
+                  </label>
+                  <div className="flex h-[58px] overflow-hidden rounded-xl border border-[#cbd5e1] bg-white focus-within:border-[#116dff] focus-within:ring-2 focus-within:ring-[#116dff]/15">
+                    <div className="relative shrink-0 border-r border-[#cbd5e1] bg-[#f8fafc]">
+                      <select
+                        value={phonePrefix}
+                        onChange={(e) => setPhonePrefix(e.target.value)}
+                        className="h-full pl-5 pr-9 bg-transparent text-sm font-semibold text-[#334155] outline-none appearance-none cursor-pointer"
+                        style={{ accentColor: '#116dff' }}
+                      >
+                        <option value="+91">+91</option>
+                        <option value="+1">+1</option>
+                        <option value="+44">+44</option>
+                        <option value="+971">+971</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 text-[#64748B]" />
+                    </div>
+                    <input
+                      id="customer-phone"
+                      value={formData.phone}
+                      onChange={(e) => changeField('phone', e.target.value)}
+                      placeholder="Enter phone number"
+                      className="min-w-0 flex-1 bg-transparent px-5 text-sm text-[#1e293b] placeholder:text-[#94a3b8] outline-none"
+                      inputMode="tel"
+                    />
+                  </div>
+                </div>
+
+                {/* WhatsApp Number */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="customer-whatsapp" className={labelStyle}>
+                      WhatsApp Number
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (phoneIsComplete) {
+                          changeField('whatsappId', formData.phone.trim());
+                          setWhatsappPrefix(phonePrefix);
+                        }
+                      }}
+                      disabled={!phoneIsComplete}
+                      className="text-xs font-semibold text-[#116dff] hover:text-[#0d5fd9] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Same as phone
+                    </button>
+                  </div>
+                  <div className={`flex h-[58px] overflow-hidden rounded-xl border bg-white transition ${phoneIsComplete ? 'border-[#cbd5e1] focus-within:border-[#116dff] focus-within:ring-2 focus-within:ring-[#116dff]/15' : 'border-[#cbd5e1]/40 opacity-70 cursor-not-allowed'}`}>
+                    <div className="relative shrink-0 border-r border-[#cbd5e1] bg-[#f8fafc]">
+                      <select
+                        value={whatsappPrefix}
+                        onChange={(e) => setWhatsappPrefix(e.target.value)}
+                        className="h-full pl-5 pr-9 bg-transparent text-sm font-semibold text-[#334155] outline-none appearance-none cursor-pointer disabled:cursor-not-allowed"
+                        disabled={!phoneIsComplete}
+                        style={{ accentColor: '#116dff' }}
+                      >
+                        <option value="+91">+91</option>
+                        <option value="+1">+1</option>
+                        <option value="+44">+44</option>
+                        <option value="+971">+971</option>
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 text-[#64748B]" />
+                    </div>
+                    <input
+                      id="customer-whatsapp"
+                      value={formData.whatsappId}
+                      onChange={(e) => changeField('whatsappId', e.target.value)}
+                      onFocus={() => {
+                        if (phoneIsComplete && !formData.whatsappId.trim()) {
+                          changeField('whatsappId', formData.phone.trim());
+                          setWhatsappPrefix(phonePrefix);
+                        }
+                      }}
+                      placeholder="Enter WhatsApp number"
+                      className="min-w-0 flex-1 bg-transparent px-5 text-sm text-[#1e293b] placeholder:text-[#94a3b8] outline-none disabled:cursor-not-allowed"
+                      inputMode="tel"
+                      disabled={!phoneIsComplete}
+                    />
+                  </div>
+                </div>
+
+                {/* Email Address */}
+                <div className="space-y-2.5">
+                  <label htmlFor="customer-email" className={labelStyle}>
+                    Email Address <span className="text-[#64748B]">(optional)</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-[#94a3b8]" />
+                    <input
+                      id="customer-email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => changeField('email', e.target.value)}
+                      placeholder="Enter email address"
+                      className={`${inputStyle} pl-14`}
+                    />
+                  </div>
+                </div>
+
+                {/* Customer Type */}
+                <div className="space-y-2.5">
+                  <label className={labelStyle}>
+                    Customer Type
+                  </label>
+                  <div className="relative" ref={typeDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setTypeDropdownOpen((prev) => !prev)}
+                      className={`${inputStyle} flex items-center justify-between pr-12 text-left cursor-pointer ${typeDropdownOpen ? 'border-[#116dff] ring-2 ring-[#116dff]/15' : ''}`}
+                    >
+                      <span>{formData.customerType === 'WALK_IN' ? 'Walk-in Customer' : formData.customerType === 'RETURNING' ? 'Returning Customer' : 'Business Account'}</span>
+                    </button>
+                    <ChevronDown className={`pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-[#64748B] transition-transform ${typeDropdownOpen ? 'rotate-180' : ''}`} />
+                    {typeDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-lg">
+                        {[
+                          { value: 'WALK_IN', label: 'Walk-in Customer' },
+                          { value: 'RETURNING', label: 'Returning Customer' },
+                          { value: 'BUSINESS', label: 'Business Account' },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              changeField('customerType', option.value);
+                              setTypeDropdownOpen(false);
+                            }}
+                            className={`w-full px-5 py-3 text-left text-sm transition cursor-pointer ${
+                              formData.customerType === option.value
+                                ? 'bg-[#116dff] text-white font-semibold'
+                                : 'text-[#1e293b] hover:bg-[#f1f5f9]'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs leading-5 text-[#64748B]">
+                    Used to group customers in the customer list.
+                  </p>
+                </div>
+
+                {/* Internal Notes */}
+                <div className="space-y-2.5">
+                  <label htmlFor="customer-notes" className={labelStyle}>
+                    Internal Notes <span className="text-[#64748B]">(optional)</span>
+                  </label>
+                  <textarea
+                    id="customer-notes"
+                    value={formData.notes}
+                    onChange={(e) => changeField('notes', e.target.value)}
+                    placeholder="Add notes for your team"
+                    className={`${inputStyle} h-[96px] resize-y py-4`}
+                  />
+                </div>
+
+                {/* Location */}
+                <div className="space-y-2.5">
+                  <label htmlFor="customer-location" className={labelStyle}>
+                    Location <span className="text-[#64748B]">(optional)</span>
+                  </label>
+                  <div className="relative">
+                    <MapPin className="pointer-events-none absolute left-5 top-1/2 size-5 -translate-y-1/2 text-[#94a3b8]" />
+                    <input
+                      id="customer-location"
+                      value={formData.address}
+                      onChange={(e) => changeField('address', e.target.value)}
+                      placeholder="Enter location"
+                      className={`${inputStyle} pl-14`}
+                    />
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[#e2e8f0] bg-[#f8fafc] px-6 py-5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-[54px] min-w-[130px] rounded-xl border border-[#cbd5e1] bg-white px-7 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex h-[54px] min-w-[162px] items-center justify-center gap-2 rounded-xl bg-[#116dff] hover:bg-[#3b82f6] px-7 text-sm font-bold text-white shadow-lg shadow-[#116dff]/10 transition disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+              >
+                {isSubmitting && <Loader2 className="size-4 animate-spin" />}
+                {customerToEdit ? 'Save Changes' : 'Submit'}
+              </button>
+            </div>
+          </form>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
-
-
-
-

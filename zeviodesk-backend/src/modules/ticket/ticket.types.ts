@@ -3,11 +3,13 @@ export type TicketStatus =
   | "DIAGNOSING"
   | "WAITING_FOR_PARTS"
   | "IN_PROGRESS"
+  | "REPAIR_COMPLETED"
   | "READY_FOR_PICKUP"
   | "COMPLETED"
+  | "DELIVERED"
   | "CANCELLED";
 
-export type TicketPriority = "NORMAL" | "URGENT" | "WARRANTY";
+export type TicketPriority = "NORMAL" | "URGENT";
 
 export interface TicketAttachment {
   id: string;
@@ -69,6 +71,7 @@ export interface CreateTicketDto {
   internalNotes?: string;
   attachments?: TicketAttachment[];
   photos?: string[];
+  attachmentIds?: string[];
 }
 
 export interface UpdateTicketDto extends Partial<CreateTicketDto> {
@@ -78,6 +81,13 @@ export interface UpdateTicketDto extends Partial<CreateTicketDto> {
   pickupSignatureUrl?: string;
   feedbackRating?: number;
   followUpDate?: string;
+  trackingEnabled?: boolean;
+  showEstimate?: boolean;
+  showPartsBreakdown?: boolean;
+  showAdvancePaid?: boolean;
+  showBalanceDue?: boolean;
+  showSerialMasked?: boolean;
+  customerNote?: string;
 }
 
 /** All mutable ticket fields (excluding ownership). */
@@ -94,4 +104,6 @@ export const ALL_UPDATE_FIELDS: (keyof UpdateTicketDto)[] = [
   "advanceDeposit", "internalNotes", "attachments", "photos",
   "pickupSignatureUrl", "feedbackRating",
   "globalCatalogItemId", "tenantCatalogItemId",
+  "trackingEnabled", "showEstimate", "showPartsBreakdown", "showAdvancePaid",
+  "showBalanceDue", "showSerialMasked", "customerNote",
 ];

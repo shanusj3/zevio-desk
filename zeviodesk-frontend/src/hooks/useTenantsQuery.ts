@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { Tenant } from '../types';
 import { tenantsApi, FetchTenantsParams, PaginatedTenants } from '../lib/api';
+import { applyAndCacheTheme } from '../lib/theme';
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,14 @@ export function useUpdateTenantMutation() {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['tenants-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['invoicingSettings'] });
       queryClient.setQueryData(['tenant', updated.id], updated);
+      if (updated.primaryColor) {
+        applyAndCacheTheme({
+          primaryColor: updated.primaryColor,
+          logoUrl: updated.logoUrl,
+        }, updated.subdomain);
+      }
     },
   });
 }

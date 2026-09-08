@@ -20,14 +20,15 @@ export const overviewService = {
     });
 
     const numTickets = tickets.length;
-    const completedTickets = tickets.filter(t => t.status === "COMPLETED").length;
+    const completedTickets = tickets.filter(t => t.status === "DELIVERED" || t.status === "COMPLETED").length;
+    const repairCompletedTickets = tickets.filter(t => t.status === "REPAIR_COMPLETED").length;
     const readyForPickupTickets = tickets.filter(t => t.status === "READY_FOR_PICKUP").length;
 
-    // 2. Average completion time (for tickets completed in selected range)
+    // 2. Average completion time (for tickets completed/delivered in selected range)
     const completedTicketsInRange = await prisma.ticket.findMany({
       where: {
         tenantId,
-        status: "COMPLETED",
+        status: { in: ["DELIVERED", "COMPLETED"] },
         actualCompletionDate: { gte: startDate, lte: endDate },
       },
       select: {

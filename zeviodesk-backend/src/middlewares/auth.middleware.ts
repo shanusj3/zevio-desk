@@ -9,6 +9,11 @@ export async function authMiddleware(req: CustomRequest, res: Response, next: Ne
   try {
     let token = req.cookies.zevio_token;
 
+    // Fallback to query parameter for EventSource (SSE) connections
+    if (!token && req.query.token) {
+      token = req.query.token as string;
+    }
+
     // Fallback to Bearer token for mobile app or external integrations
     if (!token && req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];

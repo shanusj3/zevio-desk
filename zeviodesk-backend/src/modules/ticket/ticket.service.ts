@@ -6,9 +6,11 @@ import { generateTicketAttachmentPresign } from "../../services/s3-upload.servic
 import { prisma } from "../../config/prisma.js";
 import { paymentService } from "../payment/payment.service.js";
 import { enrichTicketWithPaymentSummary } from "../payment/payment.utils.js";
-import { NotFoundError, ValidationError } from "../../errors/AppError.js";
+import { NotFoundError, ValidationError, ForbiddenError } from "../../errors/AppError.js";
 import { catalogService } from "../catalog/catalog.service.js";
 import { randomBytes } from "crypto";
+import { stockMovementService } from "../inventory/stock-movement.service.js";
+import { emitTicketAssigned } from "../../socket/index.js";
 
 /**
  * Validates that a technician can be assigned a new ticket:
@@ -33,7 +35,8 @@ async function assertAssigneeCapacity(
 
   const maxJobs = (user as any).maxConcurrentJobs as number | null | undefined;
   if (maxJobs != null && maxJobs > 0) {
-    const ACTIVE_STATUSES: TicketStatus[] = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS", "READY_FOR_PICKUP"];
+    // Technician active workload: only pre-completion statuses count towards concurrent job limit
+    const ACTIVE_STATUSES: TicketStatus[] = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS"];
     const activeCount = await prisma.ticket.count({
       where: {
         assignedToId,
@@ -52,41 +55,113 @@ async function assertAssigneeCapacity(
   }
 }
 
-export const ticketService = {
-  getTickets: async (tenantId?: string, status?: string, assignedToId?: string, startDate?: Date, endDate?: Date, role?: string, statusIn?: string[], skip?: number, take?: number) => {
-    let allowedStatuses: string[] | undefined = undefined;
-    let effectiveStartDate = startDate;
-    let effectiveEndDate = endDate;
+async function enrichCustomerStats(ticket: any) {
+  if (ticket && ticket.customerId && ticket.customer) {
+    const completedStatuses = ["REPAIR_COMPLETED", "READY_FOR_PICKUP", "DELIVERED", "COMPLETED"];
 
-    console.log("[DEBUG getTickets]", { tenantId, role, statusIn, skip, take });
+    const [totalJobs, completedJobsCount, paymentAgg, lineItemsAgg, ticketBilledAgg, latestCompletedTicket] = await Promise.all([
+      prisma.ticket.count({ where: { customerId: ticket.customerId } }),
+      prisma.ticket.count({ where: { customerId: ticket.customerId, status: { in: completedStatuses as any } } }),
+      prisma.payment.aggregate({
+        where: { ticket: { customerId: ticket.customerId } },
+        _sum: { amount: true },
+      }),
+      prisma.ticketLineItem.aggregate({
+        where: { ticket: { customerId: ticket.customerId } },
+        _sum: { lineTotal: true },
+      }),
+      prisma.ticket.aggregate({
+        where: { customerId: ticket.customerId },
+        _sum: { totalAmount: true },
+      }),
+      prisma.ticket.findFirst({
+        where: { customerId: ticket.customerId, status: { in: completedStatuses as any } },
+        orderBy: { updatedAt: "desc" },
+        select: { createdAt: true, actualCompletionDate: true, updatedAt: true },
+      }),
+    ]);
+
+    const paymentTotal = paymentAgg._sum.amount ? Number(paymentAgg._sum.amount) : 0;
+    const lineItemsTotal = lineItemsAgg._sum.lineTotal ? Number(lineItemsAgg._sum.lineTotal) : 0;
+    const billedTotal = ticketBilledAgg._sum.totalAmount ? Number(ticketBilledAgg._sum.totalAmount) : 0;
+    const lifetimeSpend = Math.max(paymentTotal, lineItemsTotal, billedTotal);
+
+    const lastService = latestCompletedTicket
+      ? (latestCompletedTicket.actualCompletionDate || latestCompletedTicket.updatedAt || latestCompletedTicket.createdAt)
+      : null;
+
+    const isReturning = totalJobs > 1 || completedJobsCount > 0;
+
+    ticket.customer = {
+      ...ticket.customer,
+      totalJobs,
+      totalVisits: totalJobs,
+      lifetimeSpend,
+      totalRevenue: lifetimeSpend,
+      lastService,
+      lastVisit: lastService,
+      isReturning,
+      customerStatusBadge: isReturning ? "RETURNING CUSTOMER" : "NEW CUSTOMER",
+    };
+  }
+  return ticket;
+}
+
+export const ticketService = {
+  getTickets: async (
+    tenantId?: string,
+    status?: string,
+    assignedToId?: string,
+    startDate?: Date,
+    endDate?: Date,
+    role?: string,
+    statusIn?: string[],
+    skip?: number,
+    take?: number,
+    search?: string,
+    priority?: string
+  ) => {
+    let allowedStatuses: string[] | undefined = undefined;
 
     if (role === "TECHNICIAN") {
-      allowedStatuses = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS"];
-      effectiveStartDate = undefined;
-      effectiveEndDate = undefined;
-    } else if (role === "ADVISOR") {
-      allowedStatuses = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS", "READY_FOR_PICKUP"];
-      effectiveStartDate = undefined;
-      effectiveEndDate = undefined;
-    } else if (role === "TENANT_ADMIN" || role === "MANAGER") {
-      allowedStatuses = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS", "READY_FOR_PICKUP"];
+      allowedStatuses = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS", "REPAIR_COMPLETED"];
+    } else if (role === "ADVISOR" || role === "TENANT_ADMIN" || role === "MANAGER" || role === "SUPER_ADMIN") {
+      allowedStatuses = [
+        "RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS",
+        "REPAIR_COMPLETED", "READY_FOR_PICKUP", "DELIVERED", "COMPLETED", "CANCELLED"
+      ];
     }
 
     let resolvedStatusIn = statusIn;
-    if (allowedStatuses) {
-       if (resolvedStatusIn && resolvedStatusIn.length > 0) {
-           resolvedStatusIn = resolvedStatusIn.filter(s => allowedStatuses!.includes(s));
-           if (resolvedStatusIn.length === 0) {
-               console.log("[DEBUG getTickets] resolvedStatusIn is empty after filtering, returning []");
-               return { data: [], total: 0 }; // No valid statuses allowed
-           }
-       } else {
-           resolvedStatusIn = allowedStatuses;
-       }
+    if (allowedStatuses && status && status !== "All") {
+      // Specific status requested
+      resolvedStatusIn = [status];
+    } else if (allowedStatuses) {
+      if (resolvedStatusIn && resolvedStatusIn.length > 0) {
+        resolvedStatusIn = resolvedStatusIn.filter((s) => allowedStatuses!.includes(s));
+        if (resolvedStatusIn.length === 0) {
+          return { data: [], total: 0 };
+        }
+      }
     }
 
-    console.log("[DEBUG getTickets] calling findAll with:", { tenantId, assignedToId, resolvedStatusIn, skip, take });
-    return ticketRepository.findAll(tenantId, status, assignedToId, effectiveStartDate, effectiveEndDate, resolvedStatusIn, skip, take);
+    return ticketRepository.findAll(
+      tenantId,
+      status,
+      assignedToId,
+      startDate,
+      endDate,
+      resolvedStatusIn,
+      skip,
+      take,
+      search,
+      priority
+    );
+  },
+
+  getRepairCompleted: async (tenantId?: string) => {
+    if (!tenantId) throw new ValidationError("Tenant context missing");
+    return ticketRepository.findRepairCompleted(tenantId);
   },
 
   getReadyForPickup: async (tenantId?: string) => {
@@ -94,64 +169,95 @@ export const ticketService = {
     return ticketRepository.findReadyForPickup(tenantId);
   },
 
-  deliverTicket: async (id: string, tenantId?: string) => {
+  completeRepair: async (id: string, tenantId?: string, actorId?: string, actorRole?: string) => {
+    if (!tenantId) throw new ValidationError("Tenant context missing");
+    const ticket = await prisma.ticket.findFirst({ where: { id, tenantId } });
+    if (!ticket) throw new NotFoundError("Ticket not found");
+
+    if (actorRole === "TECHNICIAN" && ticket.assignedToId !== actorId) {
+      throw new ForbiddenError("Technicians can only complete repairs assigned to them");
+    }
+
+    const ALLOWED_FROM_STATUSES = ["RECEIVED", "DIAGNOSING", "WAITING_FOR_PARTS", "IN_PROGRESS"];
+    if (!ALLOWED_FROM_STATUSES.includes(ticket.status)) {
+      if (ticket.status === "REPAIR_COMPLETED") {
+        throw new ValidationError("Repair has already been marked as completed.");
+      }
+      throw new ValidationError(`Cannot complete repair from status ${ticket.status}`);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.ticket.update({
+        where: { id },
+        data: {
+          status: "REPAIR_COMPLETED",
+          actualCompletionDate: new Date(),
+        },
+      });
+
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: id,
+          status: "REPAIR_COMPLETED",
+          customerNote: "Technical repair completed by technician. Awaiting invoice processing.",
+          createdById: actorId,
+        },
+      });
+
+      emitTicketAssigned(updated);
+      return updated;
+    });
+  },
+
+  deliverTicket: async (id: string, tenantId?: string, actorId?: string) => {
     if (!tenantId) throw new ValidationError("Tenant context missing");
     const ticket = await prisma.ticket.findFirst({ where: { id, tenantId }, include: { invoice: true } });
     if (!ticket) throw new NotFoundError("Ticket not found");
     if (ticket.status !== "READY_FOR_PICKUP") {
       throw new ValidationError("Only tickets ready for pickup can be delivered");
     }
-    if (!ticket.invoice || ticket.invoice.status !== "FINALIZED" || ticket.invoice.paymentStatus !== "PAID") {
-      throw new ValidationError("A finalized, fully paid invoice is required before delivery");
-    }
-    return prisma.ticket.update({ where: { id }, data: { status: "COMPLETED", actualCompletionDate: new Date(), pickupDate: new Date() } });
+
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.ticket.update({
+        where: { id },
+        data: {
+          status: "DELIVERED",
+          pickupDate: new Date(),
+          actualCompletionDate: ticket.actualCompletionDate || new Date(),
+        },
+      });
+
+      await tx.ticketStatusHistory.create({
+        data: {
+          ticketId: id,
+          status: "DELIVERED",
+          customerNote: "Device physically handed over to customer.",
+          createdById: actorId,
+        },
+      });
+
+      emitTicketAssigned(updated);
+      return updated;
+    });
   },
 
+  // ─── Queries ──────────────────────────────────────────────────────────────────
   getTicketById: async (id: string) => {
     const ticket = await ticketRepository.findById(id);
     if (!ticket) throw new NotFoundError("Ticket not found");
 
-    const enriched = enrichTicketWithPaymentSummary(ticket);
-
-    if (ticket.customerId && ticket.customer) {
-      const [totalJobs, revenueAgg, previousTicket, previousJobsCount] = await Promise.all([
-        prisma.ticket.count({ where: { customerId: ticket.customerId } }),
-        prisma.payment.aggregate({
-          where: { ticket: { customerId: ticket.customerId } },
-          _sum: { amount: true },
-        }),
-        prisma.ticket.findFirst({
-          where: { customerId: ticket.customerId, id: { not: ticket.id } },
-          orderBy: { createdAt: "desc" },
-          select: { createdAt: true, actualCompletionDate: true },
-        }),
-        prisma.ticket.count({
-          where: {
-            customerId: ticket.customerId,
-            id: { not: ticket.id },
-          },
-        }),
-      ]);
-
-      const lifetimeSpend = revenueAgg._sum.amount ? Number(revenueAgg._sum.amount) : 0;
-      const lastService = previousTicket
-        ? (previousTicket.actualCompletionDate || previousTicket.createdAt)
-        : null;
-      const isReturning = previousJobsCount > 0;
-
-      (enriched as any).customer = {
-        ...ticket.customer,
-        totalJobs,
-        totalVisits: totalJobs,
-        lifetimeSpend,
-        totalRevenue: lifetimeSpend,
-        lastService,
-        lastVisit: lastService,
-        isReturning,
-        customerStatusBadge: isReturning ? "RETURNING CUSTOMER" : "NEW CUSTOMER",
-      };
+    if (!ticket.trackingToken) {
+      const { randomBytes } = await import("crypto");
+      const generatedToken = `tk_${randomBytes(12).toString("hex")}`;
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { trackingToken: generatedToken },
+      });
+      (ticket as any).trackingToken = generatedToken;
     }
 
+    const enriched = enrichTicketWithPaymentSummary(ticket);
+    await enrichCustomerStats(enriched);
     return enriched;
   },
 
@@ -168,7 +274,9 @@ export const ticketService = {
       },
     });
     if (!ticket) throw new NotFoundError("Ticket not found");
-    return enrichTicketWithPaymentSummary(ticket);
+    const enriched = enrichTicketWithPaymentSummary(ticket);
+    await enrichCustomerStats(enriched);
+    return enriched;
   },
 
   createTicket: async (dto: CreateTicketDto, recordedById?: string) => {
@@ -256,6 +364,19 @@ export const ticketService = {
         } as any
       });
 
+      // Link uploaded attachments to this ticket entity
+      if (dto.attachmentIds && Array.isArray(dto.attachmentIds) && dto.attachmentIds.length > 0) {
+        await (tx as any).attachment.updateMany({
+          where: {
+            id: { in: dto.attachmentIds },
+            tenantId: dto.tenantId!,
+          },
+          data: {
+            entityId: newTicket.id,
+          },
+        });
+      }
+
       // Increment usage count if it resolved to a Tenant Catalog Item
       if (resolved.tenantCatalogItemId) {
         await catalogService.incrementUsageTx(tx, resolved.tenantCatalogItemId);
@@ -280,10 +401,15 @@ export const ticketService = {
 
     const fullTicket = await ticketRepository.findById(ticket.id);
     if (!fullTicket) throw new NotFoundError("Ticket not found");
-    return enrichTicketWithPaymentSummary(fullTicket);
+    const enriched = enrichTicketWithPaymentSummary(fullTicket);
+
+    // Emit real-time WebSocket event
+    emitTicketAssigned(enriched);
+
+    return enriched;
   },
 
-  updateTicket: async (id: string, dto: UpdateTicketDto, tenantId?: string, actorRole?: string) => {
+  updateTicket: async (id: string, dto: UpdateTicketDto, tenantId?: string, actorRole?: string, actorId?: string) => {
     // ------------------------------------------------------------------
     // Build an explicit update allow-list.
     // Ownership fields (tenantId, customerId, jobNumber) are NEVER updated
@@ -302,6 +428,10 @@ export const ticketService = {
       "internalNotes", "attachments", "photos",
       "estimatedCompletionDate",
     ];
+
+    if (actorRole === "TECHNICIAN" && dto.status && (dto.status === "READY_FOR_PICKUP" || dto.status === "COMPLETED")) {
+      throw new ForbiddenError("Technicians cannot set ticket status to READY_FOR_PICKUP or COMPLETED. Requires Advisor or Admin approval.");
+    }
 
     const allowedFields = actorRole === "TECHNICIAN" ? TECHNICIAN_FIELDS : ALL_UPDATE_FIELDS;
 
@@ -365,17 +495,43 @@ export const ticketService = {
         }
       }
 
-      // State machine validations
+      // State machine validations & atomic status history recording
       if (data.status) {
-        const merged = { ...existing, ...data };
         const from = existing.status as string;
         const to   = data.status as string;
+
+        if (from !== to) {
+          await tx.ticketStatusHistory.create({
+            data: {
+              ticketId: id,
+              status: to as any,
+              customerNote: (data.customerNote as string) || (dto as any).customerNote || undefined,
+              createdById: actorId,
+            },
+          });
+        }
+
+        // When a ticket is CANCELLED, return all inventory-linked parts to stock.
+        // This prevents inventory from being permanently deducted for repairs that never happened.
+        if (to === "CANCELLED" && from !== "CANCELLED") {
+          await stockMovementService.returnAllForTicket(tx, {
+            tenantId:        existing.tenantId,
+            ticketId:        id,
+            ticketReference: existing.ticketNumber || existing.jobNumber || undefined,
+            cancelledById:   actorId,
+          });
+        }
       }
 
-      return tx.ticket.update({
+      const updated = await tx.ticket.update({
         where: { id },
         data,
       });
+
+      // Emit real-time WebSocket event
+      emitTicketAssigned(updated);
+
+      return updated;
     });
   },
 

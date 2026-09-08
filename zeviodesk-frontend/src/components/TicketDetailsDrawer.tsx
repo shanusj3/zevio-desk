@@ -16,6 +16,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { Ticket } from '../lib/api';
+import { StatusBadge } from './StatusBadge';
 
 interface TicketDetailsDrawerProps {
   ticket: Ticket | null;
@@ -31,13 +32,10 @@ export const TicketDetailsDrawer: React.FC<TicketDetailsDrawerProps> = ({
   const getPriorityColor = (priority: Ticket['priority']) => {
     switch (priority) {
       case 'URGENT':
-        return 'bg-[#7F1D1D]/80 text-[#F87171] border border-[#DC2626]/30';
-      case 'WARRANTY':
-        return 'bg-[#1E3A8A]/80 text-[#93C5FD] border border-[#2563EB]/30';
+        return 'bg-red-900/60 text-red-300 border border-red-500/40';
       case 'NORMAL':
-        return 'bg-[#78350F]/80 text-[#FCD34D] border border-[#D97706]/30';
       default:
-        return 'bg-[#1e293b] text-[#94a3b8]';
+        return 'bg-[#78350F]/80 text-[#FCD34D] border border-[#D97706]/30';
     }
   };
 
@@ -112,18 +110,9 @@ export const TicketDetailsDrawer: React.FC<TicketDetailsDrawerProps> = ({
               <div className="bg-[#141c2c] border border-[#23314a] rounded-2xl p-5 space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(ticket.status)}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        ticket.status === 'COMPLETED' || ticket.status === 'READY_FOR_PICKUP'
-                          ? 'bg-[#34D399]'
-                          : ticket.status === 'IN_PROGRESS' || ticket.status === 'WAITING_FOR_PARTS'
-                          ? 'bg-[#FCD34D]'
-                          : 'bg-[#60A5FA]'
-                      }`} />
-                      {ticket.status.replace('_', ' ')}
-                    </span>
+                    <StatusBadge status={ticket.status} />
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getPriorityColor(ticket.priority)}`}>
-                      {ticket.priority} Priority
+                      {ticket.priority === 'URGENT' ? '🔴 Urgent' : '🟤 Normal'}
                     </span>
                   </div>
                   <div className="flex items-center gap-1 text-[11px] text-[#64748B] font-mono">

@@ -5,6 +5,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js";
 import { lineItemService, invoiceService } from "./invoice.service.js";
 import { UnauthorizedError, ValidationError } from "../../errors/AppError.js";
 import { prisma } from "../../config/prisma.js";
+import { getPublicUrl, extractObjectKey } from "../../services/s3-upload.service.js";
 
 // ─── Line Item Controller ─────────────────────────────────────────────────────
 export const lineItemController = {
@@ -14,7 +15,7 @@ export const lineItemController = {
   }),
 
   add: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const data = await lineItemService.add(req.params.ticketId, req.body, req.tenantId);
+    const data = await lineItemService.add(req.params.ticketId, req.body, req.tenantId, req.user?.id);
     return sendSuccess(res, data, "Line item added", 201);
   }),
 
@@ -23,7 +24,8 @@ export const lineItemController = {
       req.params.ticketId,
       req.params.lineItemId,
       req.body,
-      req.tenantId
+      req.tenantId,
+      req.user?.id
     );
     return sendSuccess(res, data, "Line item updated");
   }),
@@ -32,7 +34,8 @@ export const lineItemController = {
     const data = await lineItemService.remove(
       req.params.ticketId,
       req.params.lineItemId,
-      req.tenantId
+      req.tenantId,
+      req.user?.id
     );
     return sendSuccess(res, data, "Line item removed");
   }),
@@ -138,7 +141,22 @@ export const invoiceController = {
 export const invoiceSettingsController = {
   /** GET /settings/invoicing — get tenant invoicing settings & branding details */
   get: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const tenantId = req.tenantId;
+    let tenantId = req.tenantId;
+
+    // Fallback lookup if caller is SUPER_ADMIN or URL has ?tenant=slug query parameter
+    if (!tenantId) {
+      const slug = (req.query.tenant as string) || (req.headers['x-tenant-slug'] as string);
+      if (slug) {
+        const found = await prisma.tenant.findFirst({ where: { slug: slug.toLowerCase() } });
+        if (found) tenantId = found.id;
+      }
+      if (!tenantId) {
+        // Fallback to first active tenant for super admin preview
+        const first = await prisma.tenant.findFirst({ where: { status: "ACTIVE" } });
+        if (first) tenantId = first.id;
+      }
+    }
+
     if (!tenantId) throw new UnauthorizedError("Tenant context missing");
 
     const tenant = await prisma.tenant.findUnique({
@@ -152,6 +170,9 @@ export const invoiceSettingsController = {
         gstNumber: true,
         logoUrl: true,
         description: true,
+        inventoryEnabled: true,
+        primaryColor: true,
+        secondaryColor: true,
       },
     });
 
@@ -164,8 +185,11 @@ export const invoiceSettingsController = {
         phone: tenant?.phone ?? "",
         address: tenant?.address ?? "",
         gstNumber: tenant?.gstNumber ?? "",
-        logoUrl: tenant?.logoUrl ?? "",
+        logoUrl: getPublicUrl(tenant?.logoUrl),
         description: tenant?.description ?? "",
+        inventoryEnabled: tenant?.inventoryEnabled ?? false,
+        primaryColor: tenant?.primaryColor || "#7C3AED",
+        secondaryColor: tenant?.secondaryColor || "#F59E0B",
       },
       "Invoicing settings retrieved"
     );
@@ -176,7 +200,7 @@ export const invoiceSettingsController = {
     const tenantId = req.tenantId;
     if (!tenantId) throw new UnauthorizedError("Tenant context missing");
 
-    const { defaultInvoiceDetailLevel, name, businessEmail, phone, address, gstNumber, logoUrl, description } = req.body;
+    const { defaultInvoiceDetailLevel, name, businessEmail, phone, address, gstNumber, logoUrl, description, inventoryEnabled, primaryColor, secondaryColor } = req.body;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^[\d\s\+\-\(\)]{7,20}$/;
@@ -211,8 +235,11 @@ export const invoiceSettingsController = {
     if (phone !== undefined) updateData.phone = phone;
     if (address !== undefined) updateData.address = address;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
-    if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
+    if (logoUrl !== undefined) updateData.logoUrl = logoUrl ? extractObjectKey(logoUrl) : null;
     if (description !== undefined) updateData.description = description;
+    if (inventoryEnabled !== undefined) updateData.inventoryEnabled = inventoryEnabled;
+    if (primaryColor !== undefined) updateData.primaryColor = primaryColor;
+    if (secondaryColor !== undefined) updateData.secondaryColor = secondaryColor;
 
     const updated = await prisma.tenant.update({
       where: { id: tenantId },
@@ -226,8 +253,20 @@ export const invoiceSettingsController = {
         gstNumber: true,
         logoUrl: true,
         description: true,
+        inventoryEnabled: true,
+        primaryColor: true,
+        secondaryColor: true,
       },
     });
-    return sendSuccess(res, updated, "Invoicing settings updated");
+    return sendSuccess(
+      res,
+      {
+        ...updated,
+        logoUrl: getPublicUrl(updated.logoUrl),
+        primaryColor: updated.primaryColor ?? "#116dff",
+        secondaryColor: updated.secondaryColor ?? "#F59E0B",
+      },
+      "Invoicing settings updated"
+    );
   }),
 };

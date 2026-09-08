@@ -36,8 +36,10 @@ enum TicketStatus {
   DIAGNOSING
   WAITING_FOR_PARTS
   IN_PROGRESS
+  REPAIR_COMPLETED
   READY_FOR_PICKUP
   COMPLETED
+  DELIVERED
   CANCELLED
 }
 
@@ -67,6 +69,13 @@ enum PaymentType {
   REFUND
 }
 
+enum StockMovementType {
+  STOCK_IN    // Manual stock addition
+  STOCK_OUT   // Consumed via a ticket line item
+  ADJUSTMENT  // Manual correction by manager/admin
+  RETURN      // Reversed because a line item was removed or ticket cancelled
+}
+
 model Tenant {
   id             String       @id @default(uuid())
   name           String
@@ -86,6 +95,8 @@ model Tenant {
   monthlyRevenue Decimal?
   logoUrl        String?
   defaultInvoiceDetailLevel String @default("STANDARD") // "MINIMAL" | "STANDARD" | "DETAILED"
+  inventoryEnabled          Boolean @default(false)      // Optional inventory module toggle
+  whatsappEnabled           Boolean @default(false)      // WhatsApp module toggle
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -97,6 +108,10 @@ model Tenant {
   tenantCatalogItems TenantCatalogItem[]
   ticketCounter      TicketCounter?
   invoiceSequences   InvoiceSequence[]
+  inventoryItems     InventoryItem[]
+  dashboardPrefs     UserDashboardPreference[]
+  dashboardAlerts    DashboardAlert[]
+  attachments        Attachment[]
 
   @@map("tenants")
 }
@@ -120,13 +135,58 @@ model User {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  tenant           Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assignedTickets  Ticket[]      @relation("AssignedAgent")
+  tenant           Tenant?                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedTickets  Ticket[]                  @relation("AssignedAgent")
   activities       ActivityLog[]
   recordedPayments Payment[]
+  dashboardPrefs   UserDashboardPreference[]
+  dashboardAlerts  DashboardAlert[]
 
   @@index([tenantId, createdAt])
   @@map("users")
+}
+
+enum DashboardAlertTriggerType {
+  EVERY
+  LIMIT
+}
+
+model UserDashboardPreference {
+  id             String   @id @default(uuid())
+  userId         String
+  tenantId       String
+  visibleStatIds Json     // String array of selected stat card IDs
+  statOrder      Json?    // Optional custom ordering
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@map("user_dashboard_preferences")
+}
+
+model DashboardAlert {
+  id           String                    @id @default(uuid())
+  userId       String
+  tenantId     String
+  statId       String
+  statName     String?                   // Display snapshot only
+  triggerType  DashboardAlertTriggerType @default(EVERY)
+  limitValue   Decimal?                  // Numeric limit value
+  enabled      Boolean                   @default(true)
+  soundEnabled Boolean                   @default(true)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, statId])
+  @@index([tenantId, userId])
+  @@map("dashboard_alerts")
 }
 
 model Customer {
@@ -220,12 +280,23 @@ model Ticket {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customer   Customer  @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  assignedTo User?     @relation("AssignedAgent", fields: [assignedToId], references: [id], onDelete: SetNull)
-  payments   Payment[]
-  lineItems  TicketLineItem[]
-  invoice    Invoice?
+  trackingToken      String?   @unique @default(uuid())
+  trackingEnabled    Boolean   @default(true)
+  trackingCreatedAt  DateTime  @default(now())
+  trackingRevokedAt  DateTime?
+  showEstimate       Boolean   @default(true)
+  showPartsBreakdown Boolean   @default(true)
+  showAdvancePaid    Boolean   @default(true)
+  showBalanceDue     Boolean   @default(true)
+  showSerialMasked   Boolean   @default(true)
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer      Customer              @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  assignedTo    User?                 @relation("AssignedAgent", fields: [assignedToId], references: [id], onDelete: SetNull)
+  payments      Payment[]
+  lineItems     TicketLineItem[]
+  invoice       Invoice?
+  statusHistory TicketStatusHistory[]
 
   @@unique([tenantId, jobNumber])
   @@unique([tenantId, ticketNumber])
@@ -233,6 +304,20 @@ model Ticket {
   @@index([tenantId, status, createdAt])
   @@index([tenantId, assignedToId, status, createdAt])
   @@map("tickets")
+}
+
+model TicketStatusHistory {
+  id           String       @id @default(uuid())
+  ticketId     String
+  ticket       Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  status       TicketStatus
+  customerNote String?
+  internalNote String?
+  createdById  String?
+  createdAt    DateTime     @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_status_histories")
 }
 
 model Payment {
@@ -273,14 +358,186 @@ model TenantWhatsApp {
   id            String   @id @default(uuid())
   tenantId      String   @unique
   wabaId        String
-  phoneNumberId String
-  accessToken   String // Encrypted
+  phoneNumberId String   @unique // Unique globally as guaranteed by architecture
+  displayPhoneNumber String?
+  businessName       String?
+  businessPortfolioId String?
+  status        String   @default("DISCONNECTED") // "CONNECTING" | "CONNECTED" | "DISCONNECTED" | "ERROR"
+  coexistenceEnabled  Boolean  @default(false)
+  accessToken   String // Encrypted access token
+
+  // Server-side WhatsApp automation configuration toggles
+  ticketCreatedEnabled    Boolean @default(false)
+  readyForPickupEnabled   Boolean @default(false)
+  ticketCompletedEnabled  Boolean @default(false)
+
+  connectedAt   DateTime?
+  disconnectedAt DateTime?
+  lastWebhookAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_whatsapp")
+}
+
+model WhatsAppContact {
+  id           String   @id @default(uuid())
+  tenantId     String
+  customerId   String?  // Nullable if not yet linked to Zeviodesk Customer
+  phoneNumber  String
+  profileName  String?
+  lastMessageAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  conversations WhatsAppConversation[]
+
+  @@unique([tenantId, phoneNumber])
+  @@index([tenantId, phoneNumber])
+  @@map("whatsapp_contacts")
+}
+
+model WhatsAppConversation {
+  id            String   @id @default(uuid())
+  tenantId      String
+  contactId     String
+  assignedUserId String? // Nullable if unassigned
+  status        String   @default("OPEN") // "OPEN" | "CLOSED"
+  lastInboundAt DateTime?
+  lastMessageAt DateTime?
+  unreadCount   Int      @default(0)
+  closedAt      DateTime?
+  closedBy      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contact      WhatsAppContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  messages     WhatsAppMessage[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, assignedUserId])
+  @@index([tenantId, lastMessageAt])
+  @@index([tenantId, contactId])
+  @@map("whatsapp_conversations")
+}
+
+enum WhatsAppMessageType {
+  TEXT
+  TEMPLATE
+  IMAGE
+  DOCUMENT
+  AUDIO
+  VIDEO
+  INTERACTIVE
+}
+
+enum WhatsAppMessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model WhatsAppMessage {
+  id                String   @id @default(uuid())
+  tenantId          String
+  conversationId    String
+  contactId         String
+  whatsappMessageId String?  // Nullable for PENDING outbound messages
+  clientMessageId   String?  // For outgoing idempotency protection
+  direction         String   // "INBOUND" | "OUTBOUND"
+  type              WhatsAppMessageType @default(TEXT)
+  body              String?
+  templateName      String?
+  templateLanguage  String?
+  ticketId          String?  // Optional ticket context link
+
+  // Media references
+  mediaId           String?
+  mediaStorageKey   String?
+  mimeType          String?
+  fileName          String?
+  fileSize          Int?
+
+  status            WhatsAppMessageStatus @default(PENDING)
+  errorCode         String?
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, whatsappMessageId])
+  @@unique([tenantId, clientMessageId])
+  @@map("whatsapp_messages")
+}
+
+enum WhatsAppNotificationType {
+  TICKET_CREATED
+  READY_FOR_PICKUP
+  TICKET_COMPLETED
+}
+
+model WhatsAppNotification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  ticketId  String
+  type      WhatsAppNotificationType
+  status    String   @default("SENT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, ticketId, type])
+  @@map("whatsapp_notifications")
+}
+
+model WhatsAppTemplate {
+  id             String   @id @default(uuid())
+  tenantId       String
+  templateName   String
+  metaTemplateId String?
+  category       String   // "UTILITY" | "MARKETING" | "AUTHENTICATION"
+  language       String   @default("en_US")
+  status         String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "PAUSED"
+  body           String?
+  metaPayload    Json?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, templateName])
+  @@map("whatsapp_templates")
+}
+
+model WhatsAppUsage {
+  id               String   @id @default(uuid())
+  tenantId         String
+  periodStart      DateTime
+  periodEnd        DateTime
+  messagesSent     Int      @default(0)
+  messagesReceived Int      @default(0)
+  templatesSent    Int      @default(0)
+  mediaSent        Int      @default(0)
+  failedMessages   Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, periodStart])
+  @@map("whatsapp_usages")
+}
+
+model WhatsAppAuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String?
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@map("whatsapp_audit_logs")
 }
 
 model ActivityLog {
@@ -351,12 +608,16 @@ model TicketLineItem {
   description       String
   quantity          Decimal   @default(1) @db.Decimal(10, 2)
   unitPrice         Decimal   @db.Decimal(10, 2)
+  unitCost          Decimal?  @db.Decimal(10, 2)  // Optional acquisition cost for profitability
   subtotal          Decimal   @db.Decimal(10, 2) // quantity * unitPrice - discountAmount (before tax)
   discountAmount    Decimal   @default(0) @db.Decimal(10, 2)
   taxMode           String    @default("NONE")   // "EXCLUSIVE" | "INCLUSIVE" | "NONE"
   taxRate           Decimal   @default(0) @db.Decimal(5, 2)
   taxAmount         Decimal   @default(0) @db.Decimal(10, 2)
   lineTotal         Decimal   @db.Decimal(10, 2) // subtotal + taxAmount
+
+  // Inventory link (nullable — manual parts have this as null)
+  inventoryItemId   String?   // FK to InventoryItem; null = manual/untracked part
 
   // Warranty Snapshot
   warrantyEnabled   Boolean   @default(false)
@@ -369,10 +630,13 @@ model TicketLineItem {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  ticket            Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticket            Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  inventoryItem     InventoryItem? @relation(fields: [inventoryItemId], references: [id], onDelete: SetNull)
+  stockMovements    StockMovement[]
 
   @@index([ticketId])
   @@index([tenantId])
+  @@index([inventoryItemId])
   @@map("ticket_line_items")
 }
 
@@ -436,4 +700,242 @@ model InvoiceSequence {
 
   @@unique([tenantId, year])
   @@map("invoice_sequences")
+}
+
+// ── Inventory Module ──────────────────────────────────────────────────────────
+
+/// A physical spare part or product tracked in the tenant's inventory.
+model InventoryItem {
+  id           String   @id @default(uuid())
+  tenantId     String
+
+  name         String
+  sku          String?  // Optional — not required for small shops
+  barcode      String?
+  brand        String?
+  category     String?
+  description  String?
+
+  costPrice    Decimal? @db.Decimal(10, 2)  // Acquisition cost (optional)
+  sellingPrice Decimal  @db.Decimal(10, 2)  // Default selling price
+
+  currentStock Int      @default(0)
+  minimumStock Int      @default(0)  // Threshold for low-stock alerts
+  location     String?  // Shelf / bin label
+
+  isActive     Boolean  @default(true)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+  lineItems      TicketLineItem[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, sku])
+  @@index([tenantId, isActive])
+  @@map("inventory_items")
+}
+
+/// Immutable audit record of every stock change. Never update — only insert.
+model StockMovement {
+  id              String            @id @default(uuid())
+  tenantId        String
+  inventoryItemId String
+  type            StockMovementType
+  quantity        Int               // Positive = added, Negative = removed
+  previousStock   Int
+  newStock        Int
+  reason          String?           // Optional description or reason
+  reference       String?           // e.g. ticket number "TK-1042"
+  ticketLineItemId String?          // Non-unique: one line item may produce multiple movements
+  createdById     String?
+  createdAt       DateTime @default(now())
+
+  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  lineItem        TicketLineItem? @relation(fields: [ticketLineItemId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, inventoryItemId, createdAt])
+  @@index([tenantId, type])
+  @@index([ticketLineItemId])  // Non-unique index — one line item may have multiple movements
+  @@map("stock_movements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIFIED ATTACHMENT & STORAGE SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum StorageProvider {
+  S3
+}
+
+enum AttachmentEntityType {
+  TICKET
+  PRODUCT
+  PART
+  CUSTOMER
+  TENANT
+}
+
+enum AttachmentCategory {
+  TICKET_INTAKE_PHOTO
+  TICKET_REPAIR_PHOTO
+  TICKET_INTAKE_VIDEO
+  TICKET_REPAIR_VIDEO
+  TENANT_LOGO
+  CUSTOMER_PICKUP_SIGNATURE
+  PRODUCT_IMAGE
+  PART_IMAGE
+}
+
+enum AttachmentStatus {
+  INITIATED
+  UPLOADING
+  UPLOADED
+  VERIFYING
+  READY
+  FAILED
+  REJECTED
+  EXPIRED
+  DELETED
+  STORAGE_MISSING
+}
+
+enum ScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+  SKIPPED
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum UploadSessionStatus {
+  INITIATED
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum AttachmentAuditAction {
+  UPLOAD_INITIATED
+  UPLOAD_COMPLETED
+  VERIFIED
+  VIEWED
+  DOWNLOADED
+  REJECTED
+  DELETED
+  RESTORED
+  SCAN_FAILED
+  PROCESSING_FAILED
+  STORAGE_MISSING
+}
+
+model Attachment {
+  id               String               @id @default(uuid())
+  tenantId         String
+  entityType       AttachmentEntityType
+  entityId         String
+  category         AttachmentCategory
+  storageProvider  StorageProvider      @default(S3)
+  bucket           String
+  storageKey       String
+  originalFileName String?
+  mimeType         String
+  sizeBytes        BigInt
+  checksumSha256   String?
+  objectVersionId  String?
+  status           AttachmentStatus     @default(INITIATED)
+  scanStatus       ScanStatus           @default(SKIPPED)
+  processingStatus ProcessingStatus     @default(SKIPPED)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  uploadedAt       DateTime?
+  verifiedAt       DateTime?
+  deletedAt        DateTime?
+  expiresAt        DateTime?
+  metadata         Json?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  uploadSessions UploadSession[]
+  audits         AttachmentAudit[]
+  productImages  ProductImage[]
+  partImages     PartImage[]
+
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, status])
+  @@index([storageKey])
+  @@index([expiresAt])
+  @@map("attachments")
+}
+
+model UploadSession {
+  id           String              @id @default(uuid())
+  tenantId     String
+  attachmentId String
+  storageKey   String
+  status       UploadSessionStatus @default(INITIATED)
+  expiresAt    DateTime
+  createdAt    DateTime            @default(now())
+  completedAt  DateTime?
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([attachmentId])
+  @@index([expiresAt])
+  @@map("upload_sessions")
+}
+
+model AttachmentAudit {
+  id           String                @id @default(uuid())
+  tenantId     String
+  attachmentId String
+  userId       String?
+  action       AttachmentAuditAction
+  metadata     Json?
+  createdAt    DateTime              @default(now())
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, attachmentId])
+  @@index([tenantId, createdAt])
+  @@map("attachment_audits")
+}
+
+model ProductImage {
+  id           String   @id @default(uuid())
+  productId    String
+  attachmentId String
+  sortOrder    Int      @default(0)
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([attachmentId])
+  @@map("product_images")
+}
+
+model PartImage {
+  id           String   @id @default(uuid())
+  partId       String
+  attachmentId String
+  createdAt    DateTime @default(now())
+
+  attachment Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+
+  @@index([partId])
+  @@index([attachmentId])
+  @@map("part_images")
 }
