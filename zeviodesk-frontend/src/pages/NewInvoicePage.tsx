@@ -14,13 +14,14 @@ import {
   usePaymentsQuery,
 } from '../hooks/useTicketsQuery';
 import { useAppStore } from '../store/useAppStore';
+import { formatCurrency } from '../utils/formatters';
 
 interface NewInvoicePageProps {
   onBack: () => void;
 }
 
 const fmt = (n: number | string) =>
-  `₹${parseFloat(String(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  formatCurrency(n, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 // ── Ticket Search Step ────────────────────────────────────────────────────────
 const TicketSearchStep: React.FC<{ onSelect: (t: Ticket) => void }> = ({ onSelect }) => {

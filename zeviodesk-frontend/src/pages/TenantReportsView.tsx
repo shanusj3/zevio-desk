@@ -28,6 +28,7 @@ import { reportsApi, TenantReports } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
 import { ExportScopeModal, ExportScope } from '../components/ExportScopeModal';
 import { ReportsSkeleton } from '../components/Skeleton';
+import { formatCurrency as formatCurrencyUtil, formatDate, formatDateRange } from '../utils/formatters';
 
 export type ReportTab = 'overview' | 'revenue' | 'tickets' | 'payments' | 'technicians' | 'inventory' | 'profitability';
 export type TimeframeOption = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'THIS_WEEK' | 'THIS_MONTH' | 'LAST_MONTH' | 'CUSTOM';
@@ -79,20 +80,6 @@ export const TenantReportsView: React.FC<TenantReportsViewProps> = ({ initialTab
 
   const [paymentsPage, setPaymentsPage] = useState<number>(1);
   const paymentsLimit = 10;
-
-  // Format helper for calendar date YYYY-MM-DD
-  const formatDateLocal = (date: Date) => {
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const formatReadableDateRange = (start: Date, end: Date) => {
-    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    return `${startStr} - ${endStr}`;
-  };
 
   // Compute dates when timeframe changes
   useEffect(() => {
@@ -157,9 +144,9 @@ export const TenantReportsView: React.FC<TenantReportsViewProps> = ({ initialTab
       prevStart = new Date(prevEnd.getTime() - diffMs);
     }
 
-    setStartDateStr(formatDateLocal(start));
-    setEndDateStr(formatDateLocal(end));
-    setPrevPeriodStr(formatReadableDateRange(prevStart, prevEnd));
+    setStartDateStr(formatDate(start, { formatStyle: 'iso' }));
+    setEndDateStr(formatDate(end, { formatStyle: 'iso' }));
+    setPrevPeriodStr(formatDateRange(prevStart, prevEnd));
   }, [timeframe, customStart, customEnd]);
 
   // Query tenant report metrics from backend API
@@ -172,14 +159,8 @@ export const TenantReportsView: React.FC<TenantReportsViewProps> = ({ initialTab
     enabled: !!startDateStr && !!endDateStr,
   });
 
-  // Currency helper formatting according to tenant's preferred currency style
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(val);
-  };
+  // Centralized currency formatting according to tenant's preferred currency style
+  const formatCurrency = (val: number) => formatCurrencyUtil(val, { style: 'currency', maximumFractionDigits: 0 });
 
   // Comprehensive CSV Export utility for all report sub-pages
   const handleCSVExport = (scope: ExportScope = 'all') => {

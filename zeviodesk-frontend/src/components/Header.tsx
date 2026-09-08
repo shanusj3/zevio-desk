@@ -3,6 +3,7 @@ import { Menu, Plus, ChevronDown, LogOut, User, MessageSquare } from 'lucide-rea
 import { NotificationItem } from '../types';
 import { useAppStore } from '../store/useAppStore';
 import { whatsappApi, WhatsAppConversation } from '../lib/api';
+import { formatRelativeTime } from '../utils/formatters';
 
 interface HeaderProps {
   onCreateTenantClick?: () => void;
@@ -76,15 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
   const getContactLabel = (conv: WhatsAppConversation) =>
     conv.contact.profileName || conv.contact.phoneNumber || 'Unknown';
 
-  const formatTime = (dateStr: string | null) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
-    if (diffDays === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (diffDays === 1) return 'Yesterday';
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
+  const formatTime = (dateStr: string | null) => formatRelativeTime(dateStr);
 
   const handleConversationClick = (conv: WhatsAppConversation) => {
     setIsInboxOpen(false);

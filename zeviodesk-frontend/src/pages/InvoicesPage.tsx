@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useInvoicesListQuery } from '../hooks/useInvoicesQuery';
 import { InvoiceListItem } from '../lib/api';
+import { formatCurrency } from '../utils/formatters';
 
 type PaymentFilter = 'ALL' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
 
@@ -14,7 +15,7 @@ interface InvoicesPageProps {
   outstandingOnly?: boolean;
 }
 
-const fmt = (n: string | number) => `₹${parseFloat(String(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const fmt = (n: string | number) => formatCurrency(n, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const FILTER_TABS: { id: PaymentFilter; label: string }[] = [
   { id: 'ALL', label: 'All' },

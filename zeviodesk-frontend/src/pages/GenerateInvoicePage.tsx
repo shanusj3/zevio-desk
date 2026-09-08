@@ -21,6 +21,7 @@ import { useAppStore } from '../store/useAppStore';
 import { PartSearchCombo } from '../components/PartSearchCombo';
 import { Dialog } from '../components/ui/Dialog';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { formatCurrency } from '../utils/formatters';
 
 interface GenerateInvoicePageProps {
   ticket: Ticket;
@@ -28,10 +29,8 @@ interface GenerateInvoicePageProps {
   onSuccess: () => void;
 }
 
-const fmt = (n: number | string) => {
-  const val = typeof n === 'string' ? parseFloat(n) : n;
-  return `₹${(val || 0).toFixed(2)}`;
-};
+const fmt = (n: number | string) =>
+  formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function numberToWords(num: number): string {
   const n = Math.round(Math.abs(num));

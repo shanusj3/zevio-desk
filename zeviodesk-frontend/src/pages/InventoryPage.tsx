@@ -15,6 +15,7 @@ import { PageHeader } from '../components/PageHeader';
 import { ExportScope } from '../components/ExportScopeModal';
 import { InventoryItem, StockMovement, inventoryApi } from '../lib/api';
 import { downloadCsv } from '../lib/csvExport';
+import { formatCurrency } from '../utils/formatters';
 
 const INVENTORY_CSV_HEADERS = [
   'Name', 'SKU', 'Barcode', 'Brand', 'Category', 'Description',
@@ -37,10 +38,8 @@ function inventoryToCsvRow(item: InventoryItem): string[] {
   ];
 }
 
-const money = (val: string | number | null | undefined) => {
-  const n = typeof val === 'string' ? parseFloat(val) : val;
-  return `₹${(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
+const money = (val: string | number | null | undefined) =>
+  formatCurrency(val, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const InventoryPage: React.FC = () => {
   const { currentUser, showToast } = useAppStore();

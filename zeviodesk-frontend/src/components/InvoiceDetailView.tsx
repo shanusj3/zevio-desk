@@ -3,6 +3,7 @@ import { ArrowLeft, FileText, CheckCircle2, Clock, AlertCircle, Printer, Share2,
 import { useQuery } from '@tanstack/react-query';
 import { request, InvoiceListItem } from '../lib/api';
 import { navigate, billingInvoicesPath } from '../lib/navigation';
+import { formatCurrency } from '../utils/formatters';
 
 interface InvoiceDetailViewProps {
   invoiceId: string;
@@ -10,7 +11,7 @@ interface InvoiceDetailViewProps {
 }
 
 const fmt = (n: string | number) =>
-  `₹${parseFloat(String(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const InvoiceDetailView: React.FC<InvoiceDetailViewProps> = ({ invoiceId, onBack }) => {
   const { data: invoice, isLoading, isError } = useQuery<InvoiceListItem & { lineItemsSnapshot?: any[]; notes?: string; invoiceDate?: string }>({

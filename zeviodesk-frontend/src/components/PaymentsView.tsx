@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { CreditCard, Search, Banknote, QrCode, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { request } from '../lib/api';
+import { formatCurrency } from '../utils/formatters';
 
 const fmt = (n: number | string) =>
-  `₹${parseFloat(String(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  formatCurrency(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const PaymentsView: React.FC = () => {
   const [search, setSearch] = useState('');

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, Phone, RefreshCw, Wrench, ShieldCheck, MapPin, CheckCircle2, Home } from 'lucide-react';
 import { StatusBadge } from '../components/StatusBadge';
+import { formatDate, formatDateTime } from '../utils/formatters';
 
 interface PublicTicketDTO {
   ticketNumber: string;
@@ -111,18 +112,9 @@ export const PublicCustomerTrackingPage: React.FC = () => {
   }, [token]);
 
   // Format date helper
-  const formatDateOnly = (dateStr?: string | null) => {
-    if (!dateStr) return '-';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return '-';
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  };
+  const formatDateOnly = (dateStr?: string | null) => formatDate(dateStr, { formatStyle: 'numeric-slash' });
 
-  const formatEventTime = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${timeStr}`;
-  };
+  const formatEventTime = (dateStr: string) => formatDateTime(dateStr, { style: 'compact' });
 
   if (loading) {
     return (

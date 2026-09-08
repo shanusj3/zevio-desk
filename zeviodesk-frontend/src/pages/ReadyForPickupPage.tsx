@@ -6,9 +6,10 @@ import { ReadyForPickupTicket, ticketsApi } from '../lib/api';
 import { useCreatePaymentMutation } from '../hooks/useTicketsQuery';
 import { useAppStore } from '../store/useAppStore';
 import { TableRowSkeleton } from '../components/Skeleton';
+import { formatCurrency } from '../utils/formatters';
 
 const money = (value: string | number | null | undefined) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 export function ReadyForPickupPage() {
   const navigate = useNavigate();
