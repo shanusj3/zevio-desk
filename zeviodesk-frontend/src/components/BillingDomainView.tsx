@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileText, CreditCard, RefreshCw, Plus } from 'lucide-react';
-import { InvoicesPage } from './InvoicesPage';
-import { NewInvoicePage } from './NewInvoicePage';
+import { InvoicesPage } from '../pages/InvoicesPage';
+import { NewInvoicePage } from '../pages/NewInvoicePage';
 import { InvoiceDetailView } from './InvoiceDetailView';
 import { PaymentsView } from './PaymentsView';
 import { RefundsView } from './RefundsView';
