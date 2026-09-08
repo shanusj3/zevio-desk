@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, ticketsApi, FetchTicketsParams, Payment, paymentsApi, CreateTicketPayload, UpdateTicketPayload } from '../lib/api';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Ticket, ticketsApi, FetchTicketsParams, PaginatedTicketsResult, Payment, paymentsApi, CreateTicketPayload, UpdateTicketPayload } from '../lib/api';
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
@@ -8,6 +8,27 @@ export function useTicketsQuery(params: FetchTicketsParams = {}) {
     queryKey: ['tickets', params],
     queryFn: () => ticketsApi.fetchAll(params),
     staleTime: 1000 * 60 * 2, // 2 minutes cache
+    retry: 2,
+  });
+}
+
+export function usePaginatedTicketsQuery(params: FetchTicketsParams = {}) {
+  return useQuery<PaginatedTicketsResult, Error>({
+    queryKey: ['tickets-paginated', params],
+    queryFn: () => ticketsApi.fetchPaginated(params),
+    staleTime: 1000 * 30,
+    retry: 2,
+  });
+}
+
+export function useInfiniteTicketsQuery(params: Omit<FetchTicketsParams, 'page'> = {}) {
+  return useInfiniteQuery<PaginatedTicketsResult, Error>({
+    queryKey: ['tickets-infinite', params],
+    queryFn: ({ pageParam = 1 }) =>
+      ticketsApi.fetchPaginated({ ...params, page: pageParam as number, limit: 20 }),
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
+    initialPageParam: 1,
+    staleTime: 1000 * 30,
     retry: 2,
   });
 }
@@ -26,8 +47,9 @@ export function useCreateTicketMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateTicketPayload) => ticketsApi.create(data),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      window.dispatchEvent(new CustomEvent('zevio:ticket-assigned', { detail: created }));
     },
   });
 }
@@ -40,6 +62,7 @@ export function useUpdateTicketMutation() {
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       queryClient.invalidateQueries({ queryKey: ['ticket', updated.id] });
+      window.dispatchEvent(new CustomEvent('zevio:ticket-assigned', { detail: updated }));
     },
   });
 }
@@ -50,6 +73,19 @@ export function useDeleteTicketMutation() {
     mutationFn: (id: string) => ticketsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
+    },
+  });
+}
+
+export function useCompleteRepairMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => ticketsApi.completeRepair(id),
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['ticket', updated.id] });
+      queryClient.invalidateQueries({ queryKey: ['repair-completed'] });
+      window.dispatchEvent(new CustomEvent('zevio:ticket-assigned', { detail: updated }));
     },
   });
 }
@@ -69,6 +105,21 @@ export function useCreatePaymentMutation() {
   return useMutation({
     mutationFn: (variables: { ticketId: string; data: Partial<Payment> }) =>
       paymentsApi.create(variables.ticketId, variables.data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['payments', variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    },
+  });
+}
+
+export function useDeletePaymentMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (variables: { ticketId: string; paymentId: string }) =>
+      paymentsApi.delete(variables.ticketId, variables.paymentId),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['payments', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
@@ -100,6 +151,8 @@ export function useAddLineItemMutation() {
       queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
     },
   });
 }
@@ -114,6 +167,8 @@ export function useUpdateLineItemMutation() {
       queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
     },
   });
 }
@@ -127,7 +182,10 @@ export function useRemoveLineItemMutation() {
       queryClient.invalidateQueries({ queryKey: ['line-items', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
+      queryClient.invalidateQueries({ queryKey: ['payments', variables.ticketId] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
     },
   });
 }

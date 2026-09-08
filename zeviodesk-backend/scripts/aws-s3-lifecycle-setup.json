@@ -1,0 +1,22 @@
+{
+  "Rules": [
+    {
+      "ID": "QuarantineTemporaryObjectAutoExpiration",
+      "Filter": {
+        "Prefix": "quarantine/"
+      },
+      "Status": "Enabled",
+      "Expiration": {
+        "Days": 2
+      }
+    },
+    {
+      "ID": "AbortIncompleteMultipartUploadsSafetyNet",
+      "Filter": {},
+      "Status": "Enabled",
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 2
+      }
+    }
+  ]
+}

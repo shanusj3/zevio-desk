@@ -5,6 +5,7 @@ import { createApp } from "./src/app.js";
 import { env } from "./src/config/env.js";
 import { logger } from "./src/config/logger.js";
 import { prisma } from "./src/config/prisma.js";
+import { initSocketServer } from "./src/socket/index.js";
 
 async function startServer() {
   const app = createApp();
@@ -29,6 +30,8 @@ async function startServer() {
     logger.info(`🚀 Node.js Express Server running at http://0.0.0.0:${PORT}`);
     logger.info(`📦 Modular architecture loaded: Auth, User, Tenant, Ticket, Customer, WhatsApp`);
   });
+
+  initSocketServer(server);
 
   const gracefulShutdown = async (signal: string) => {
     logger.info(`\n${signal} signal received: closing HTTP server...`);

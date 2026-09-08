@@ -2,14 +2,181 @@
 
 @theme {
   --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --color-primary: var(--tenant-primary);
+  --color-brand: var(--tenant-primary);
 }
 
 @layer base {
   :root, body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background-color: #0c1017;
-    color: #e2e8f0;
+    background-color: #ECEFF3;
+    color: #1e293b;
+    --tenant-primary: #116dff;
+    accent-color: var(--tenant-primary);
   }
+
+  input[type="checkbox"], input[type="radio"] {
+    accent-color: var(--tenant-primary);
+  }
+
+  /* Remove spinner arrows from all number inputs */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+}
+
+/* Dynamic Tenant Primary Custom Utilities via W3C Class Word Selectors */
+@layer utilities {
+  .bg-primary {
+    background-color: var(--tenant-primary) !important;
+  }
+  .text-primary {
+    color: var(--tenant-primary) !important;
+  }
+  .border-primary {
+    border-color: var(--tenant-primary) !important;
+  }
+
+  /* Exact class word matches for hardcoded #116dff and Tailwind blue utilities */
+  [class~="bg-[#116dff]"],
+  [class~="bg-blue-600"],
+  [class~="bg-blue-500"],
+  .bg-\[\#116dff\],
+  .bg-blue-600 {
+    background-color: var(--tenant-primary) !important;
+  }
+
+  [class~="bg-[#0d5fd9]"],
+  [class~="bg-blue-700"],
+  .bg-\[\#0d5fd9\],
+  .bg-blue-700 {
+    background-color: var(--tenant-primary-dark, var(--tenant-primary)) !important;
+  }
+
+  [class~="text-[#116dff]"],
+  [class~="text-blue-600"],
+  [class~="text-blue-500"],
+  .text-\[\#116dff\],
+  .text-blue-600 {
+    color: var(--tenant-primary) !important;
+  }
+
+  [class~="border-[#116dff]"],
+  [class~="border-blue-600"],
+  [class~="border-blue-500"],
+  .border-\[\#116dff\],
+  .border-blue-600 {
+    border-color: var(--tenant-primary) !important;
+  }
+
+  [class~="hover:bg-[#116dff]"]:hover,
+  [class~="hover:bg-blue-600"]:hover,
+  .hover\:bg-\[\#116dff\]:hover,
+  .hover\:bg-blue-600:hover {
+    background-color: var(--tenant-primary) !important;
+  }
+
+  [class~="hover:text-[#116dff]"]:hover,
+  [class~="hover:text-blue-600"]:hover,
+  .hover\:text-\[\#116dff\]:hover,
+  .hover\:text-blue-600:hover {
+    color: var(--tenant-primary) !important;
+  }
+
+  [class~="hover:text-white"]:hover,
+  .hover\:text-white:hover {
+    color: #ffffff !important;
+  }
+
+  [class~="hover:border-[#116dff]"]:hover,
+  [class~="hover:border-blue-600"]:hover,
+  .hover\:border-\[\#116dff\]:hover,
+  .hover\:border-blue-600:hover {
+    border-color: var(--tenant-primary) !important;
+  }
+
+  [class~="focus:border-[#116dff]"]:focus,
+  [class~="focus:border-blue-500"]:focus,
+  .focus\:border-\[\#116dff\]:focus,
+  .focus\:border-blue-500:focus {
+    border-color: var(--tenant-primary) !important;
+  }
+
+  [class~="ring-[#116dff]"],
+  [class~="ring-blue-500"],
+  [class~="ring-blue-600"],
+  [class~="focus:ring-[#116dff]"]:focus,
+  [class~="focus:ring-blue-500"]:focus {
+    --tw-ring-color: var(--tenant-primary) !important;
+  }
+
+  [class~="bg-[#116dff]/10"],
+  [class~="bg-[#eff6ff]"],
+  [class~="bg-[#edf4ff]"],
+  [class~="bg-blue-50"] {
+    background-color: var(--tenant-primary-tint, rgba(17, 109, 255, 0.1)) !important;
+  }
+}
+
+/* Input focus styling: subtle border with tenant primary color and soft glow, excluding inner transparent inputs */
+input:focus:not(.bg-transparent):not(.border-none),
+select:focus,
+textarea:focus {
+  outline: none !important;
+  border-color: var(--tenant-primary) !important;
+  box-shadow: 0 0 0 3px var(--tenant-primary-tint, rgba(17, 109, 255, 0.15)) !important;
+}
+
+input.bg-transparent,
+input.bg-transparent:focus,
+input.bg-transparent:active,
+input.border-none:focus,
+input[class*="bg-transparent"],
+input[class*="bg-transparent"]:focus,
+.bg-transparent input {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-color: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.bg-\[\#116dff\]\/10,
+.bg-\[\#eff6ff\],
+.bg-\[\#edf4ff\],
+.bg-blue-50 {
+  background-color: var(--tenant-primary-tint, rgba(17, 109, 255, 0.1)) !important;
+}
+
+.group:hover .group-hover\:bg-\[\#116dff\],
+.group:hover .group-hover\:bg-blue-600 {
+  background-color: var(--tenant-primary) !important;
+}
+
+.group:hover .group-hover\:text-\[\#116dff\],
+.group:hover .group-hover\:text-blue-600 {
+  color: var(--tenant-primary) !important;
+}
+
+.group:hover .group-hover\:text-white {
+  color: #ffffff !important;
+}
+
+.peer-checked\:bg-\[\#116dff\]:checked ~ *,
+.peer-checked\:bg-blue-600:checked ~ * {
+  background-color: var(--tenant-primary) !important;
+}
+
+.peer-checked\:border-\[\#116dff\],
+.peer-checked\:border-blue-600 {
+  border-color: var(--tenant-primary) !important;
 }
 
 /* Custom Scrollbar */
@@ -19,16 +186,16 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f1523;
+  background: #e2e8f0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #94a3b8;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #64748b;
 }
 
 /* Skeleton shimmer keyframe */
@@ -37,7 +204,84 @@
     transform: translateX(100%);
   }
 }
-/* Keep every printable invoice label monochrome, without changing the page design. */
-.invoice-print * {
-  color: #000 !important;
+
+/* Primary color highlight for native select options */
+select option:checked {
+  background: var(--tenant-primary) linear-gradient(0deg, var(--tenant-primary) 0%, var(--tenant-primary) 100%) !important;
+  color: #fff !important;
 }
+
+/* ──── Print Media Styles for Pristine Single-Page PDF Output ──── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide modal background overlay padding, dark header bar, WhatsApp banner & footer buttons */
+  .fixed.inset-0 {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    box-shadow: none !important;
+  }
+
+  .fixed.inset-0 > div {
+    max-width: 100% !important;
+    max-height: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Hide UI elements not part of the printed bill */
+  .fixed.inset-0 > div > div:first-child, /* Top dark modal header */
+  .fixed.inset-0 > div > div:nth-child(2), /* WhatsApp delivery notification banner */
+  .fixed.inset-0 > div > div:last-child,  /* Modal bottom action footer */
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  #printable-invoice,
+  .invoice-print {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  /* Force solid black text for every element on print/PDF output */
+  #printable-invoice *,
+  .invoice-print * {
+    color: #000000 !important;
+    border-color: #94a3b8 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
+

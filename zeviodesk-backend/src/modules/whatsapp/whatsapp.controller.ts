@@ -7,31 +7,14 @@ import { encryptionUtils } from "../../utils/encryption.js";
 import { prisma } from "../../config/prisma.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import { ValidationError, UnauthorizedError, NotFoundError } from "../../errors/AppError.js";
+import { whatsappEvents } from "./services/webhook.service.js";
+import { env } from "../../config/env.js";
+import { embeddedSignupService } from "./services/embedded-signup.service.js";
 
 export const whatsappController = {
   /**
-   * Legacy / cross-tenant send — SUPER_ADMIN only (enforced in routes).
-   * Does NOT require a tenant context.
-   */
-  sendMessage: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const { recipientPhone, message, templateName } = req.body;
-    if (!recipientPhone) throw new ValidationError("recipientPhone is required");
-
-    const data = await whatsappModuleService.sendMessage({ recipientPhone, message, templateName });
-    return sendSuccess(res, data, "WhatsApp message dispatched");
-  }),
-
-  /**
-   * Legacy logs — SUPER_ADMIN only (enforced in routes).
-   */
-  getLogs: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const logs = await whatsappModuleService.getHistory();
-    return sendSuccess(res, logs, "WhatsApp message logs");
-  }),
-
-  /**
    * Connect a WhatsApp Business Account.
-   * tenantId is always derived from the authenticated user's token — body tenantId is ignored.
+   * tenantId is derived from the authenticated user's JWT.
    */
   connect: asyncHandler(async (req: CustomRequest, res: Response) => {
     const tenantId = req.tenantId;
@@ -46,155 +29,250 @@ export const whatsappController = {
 
     await prisma.tenantWhatsApp.upsert({
       where: { tenantId },
-      update: { wabaId, phoneNumberId, accessToken: encryptedToken },
-      create: { tenantId, wabaId, phoneNumberId, accessToken: encryptedToken },
+      update: {
+        wabaId,
+        phoneNumberId,
+        accessToken: encryptedToken,
+        status: "CONNECTED",
+        connectedAt: new Date(),
+        disconnectedAt: null
+      },
+      create: {
+        tenantId,
+        wabaId,
+        phoneNumberId,
+        accessToken: encryptedToken,
+        status: "CONNECTED",
+        connectedAt: new Date()
+      },
     });
 
     await activityService.log("WhatsApp connected", `WABA ID: ${wabaId}`, tenantId);
 
+    // Log Audit event
+    await prisma.whatsAppAuditLog.create({
+      data: {
+        tenantId,
+        action: "WHATSAPP_CONNECTED",
+        details: `Connected WABA ID: ${wabaId}, Phone ID: ${phoneNumberId}`
+      }
+    });
+
     return sendSuccess(res, { success: true }, "WhatsApp connected successfully");
   }),
 
-  syncTemplates: asyncHandler(async (req: CustomRequest, res: Response) => {
+  /**
+   * Complete Meta Embedded Signup by exchanging authorization code for credentials
+   */
+  completeEmbeddedSignup: asyncHandler(async (req: CustomRequest, res: Response) => {
     const tenantId = req.tenantId;
     if (!tenantId) throw new UnauthorizedError("Tenant context missing");
 
-    const waConfig = await prisma.tenantWhatsApp.findUnique({ where: { tenantId } });
-    if (!waConfig) throw new ValidationError("WhatsApp not connected for this tenant");
+    const { code } = req.body;
+    if (!code) throw new ValidationError("Missing required authorization code");
 
-    const result = await whatsappModuleService.syncTemplates(waConfig.wabaId);
-
-    await activityService.log("Templates synced", `Synced to WABA ID: ${waConfig.wabaId}`, tenantId);
-
-    return sendSuccess(res, result, "Templates synced");
-  }),
-
-  sendTemplate: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const tenantId = req.tenantId;
-    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
-
-    const { to, templateName, components } = req.body;
-    if (!to || !templateName) {
-      throw new ValidationError("Missing required fields: to, templateName");
-    }
-
-    const waConfig = await prisma.tenantWhatsApp.findUnique({ where: { tenantId } });
-    if (!waConfig) throw new ValidationError("WhatsApp not connected for this tenant");
-
-    const decryptedToken = encryptionUtils.decrypt(waConfig.accessToken);
-
-    const result = await whatsappModuleService.sendDynamicTemplate(
-      to,
-      templateName,
-      components || [],
-      waConfig.phoneNumberId,
-      decryptedToken
+    // Perform server-side OAuth exchange & subscriptions setup
+    const waConfig = await embeddedSignupService.exchangeCodeAndConnect(
+      tenantId,
+      code,
+      env.META_APP_ID,
+      env.META_APP_SECRET
     );
 
-    await activityService.log("Template message sent", `Template: ${templateName}, To: ${to}`, tenantId);
+    // Log Activity
+    await activityService.log("WhatsApp connected via Embedded Signup", `WABA ID: ${waConfig.wabaId}`, tenantId);
 
-    return sendSuccess(res, result, "Dynamic template message dispatched");
-  }),
-
-  sendInvoiceNotification: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const tenantId = req.tenantId;
-    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
-
-    const { ticketId } = req.body;
-    if (!ticketId) throw new ValidationError("ticketId is required");
-
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: { customer: true }
-    });
-    if (!ticket) throw new NotFoundError("Ticket not found");
-    if (ticket.tenantId !== tenantId) throw new NotFoundError("Ticket not found");
-
-    const customerPhone = ticket.customer?.phone;
-    if (!customerPhone) {
-      throw new ValidationError("Customer does not have a phone number to receive WhatsApp notifications");
-    }
-
-    const invoice = await prisma.invoice.findUnique({
-      where: { ticketId }
-    });
-    if (!invoice) {
-      throw new ValidationError("No invoice found for this ticket. Generate and finalize the invoice first.");
-    }
-    if (invoice.status !== "FINALIZED") {
-      throw new ValidationError("Invoice is in DRAFT state and must be finalized before sending notification.");
-    }
-
-    const waConfig = await prisma.tenantWhatsApp.findUnique({ where: { tenantId } });
-
-    if (!waConfig) {
-      const mockMessage = `Hi ${ticket.customer?.name || "Customer"}, your invoice ${invoice.invoiceNumber} for ticket #${ticket.jobNumber || ticket.id.slice(0, 8)} is ready. Total: INR ${invoice.total.toFixed(2)}. Balance Due: INR ${invoice.balanceDue.toFixed(2)}. Thank you for choosing Zeviodesk!`;
-      
-      await whatsappModuleService.sendMessage({
-        recipientPhone: customerPhone,
-        message: mockMessage
-      });
-
-      return sendSuccess(
-        res,
-        { mockSent: true, message: mockMessage },
-        "WhatsApp configuration not connected; simulated notification sent to logs successfully."
-      );
-    }
-
-    const decryptedToken = encryptionUtils.decrypt(waConfig.accessToken);
-    
-    const components = [
-      {
-        type: "body",
-        parameters: [
-          { type: "text", text: ticket.customer?.name || "Customer" },
-          { type: "text", text: ticket.jobNumber || ticket.id.slice(0, 8) },
-          { type: "text", text: invoice.invoiceNumber || invoice.id.slice(0, 8) },
-          { type: "text", text: `INR ${invoice.total.toFixed(2)}` },
-          { type: "text", text: `INR ${invoice.balanceDue.toFixed(2)}` },
-        ]
+    // Log Audit event
+    await prisma.whatsAppAuditLog.create({
+      data: {
+        tenantId,
+        action: "WHATSAPP_CONNECTED",
+        details: `Connected WABA ID: ${waConfig.wabaId}, Phone ID: ${waConfig.phoneNumberId} via Embedded Signup`
       }
-    ];
+    });
 
-    const result = await whatsappModuleService.sendDynamicTemplate(
-      customerPhone,
-      "invoice_finalized",
-      components,
-      waConfig.phoneNumberId,
-      decryptedToken
-    );
-
-    await activityService.log("Invoice WhatsApp sent", `Invoice: ${invoice.invoiceNumber}, To: ${customerPhone}`, tenantId);
-
-    return sendSuccess(res, result, "Invoice finalized WhatsApp notification dispatched");
+    return sendSuccess(res, { success: true }, "WhatsApp connected successfully via Embedded Signup");
   }),
 
+  /**
+   * Disconnect WhatsApp integration
+   */
   disconnect: asyncHandler(async (req: CustomRequest, res: Response) => {
     const tenantId = req.tenantId;
     if (!tenantId) throw new UnauthorizedError("Tenant context missing");
 
-    await prisma.tenantWhatsApp.delete({ where: { tenantId } });
+    await prisma.tenantWhatsApp.update({
+      where: { tenantId },
+      data: {
+        status: "DISCONNECTED",
+        disconnectedAt: new Date()
+      }
+    });
 
     await activityService.log("WhatsApp disconnected", undefined, tenantId);
 
-    return sendSuccess(res, { success: true }, "WhatsApp disconnected");
+    // Log Audit event
+    await prisma.whatsAppAuditLog.create({
+      data: {
+        tenantId,
+        action: "WHATSAPP_DISCONNECTED",
+        details: "Integration disconnected by user request"
+      }
+    });
+
+    return sendSuccess(res, { success: true }, "WhatsApp disconnected successfully");
   }),
 
+  /**
+   * Get WhatsApp Connection status
+   */
   getStatus: asyncHandler(async (req: CustomRequest, res: Response) => {
     const tenantId = req.tenantId;
     if (!tenantId) throw new UnauthorizedError("Tenant context missing");
 
     const waConfig = await prisma.tenantWhatsApp.findUnique({ where: { tenantId } });
 
-    if (!waConfig) {
-      return sendSuccess(res, { connected: false }, "WhatsApp status");
+    if (!waConfig || waConfig.status === "DISCONNECTED") {
+      return sendSuccess(res, { 
+        connected: false, 
+        metaAppId: env.META_APP_ID, 
+        metaConfigId: env.META_CONFIG_ID 
+      }, "WhatsApp connection status");
     }
 
     return sendSuccess(
       res,
-      { connected: true, wabaId: waConfig.wabaId, phoneNumberId: waConfig.phoneNumberId },
-      "WhatsApp status"
+      {
+        connected: true,
+        wabaId: waConfig.wabaId,
+        phoneNumberId: waConfig.phoneNumberId,
+        status: waConfig.status,
+        ticketCreatedEnabled: waConfig.ticketCreatedEnabled,
+        readyForPickupEnabled: waConfig.readyForPickupEnabled,
+        ticketCompletedEnabled: waConfig.ticketCompletedEnabled,
+        metaAppId: env.META_APP_ID,
+        metaConfigId: env.META_CONFIG_ID,
+      },
+      "WhatsApp connection status"
     );
+  }),
+
+  /**
+   * Toggle automated notification settings per tenant
+   */
+  toggleAutomation: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    const { type, enabled } = req.body;
+    if (!["ticketCreated", "readyForPickup", "ticketCompleted"].includes(type)) {
+      throw new ValidationError("Invalid automation type");
+    }
+
+    const field = `${type}Enabled`;
+
+    await prisma.tenantWhatsApp.update({
+      where: { tenantId },
+      data: { [field]: !!enabled }
+    });
+
+    return sendSuccess(res, { success: true }, `Automation ${type} updated`);
+  }),
+
+  /**
+   * Fetch conversations list for the team inbox
+   */
+  getConversations: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    const status = req.query.status as string | undefined;
+    const conversations = await whatsappModuleService.getConversations(tenantId, status);
+    return sendSuccess(res, conversations, "Conversations list retrieved");
+  }),
+
+  /**
+   * Get cursor-paginated messages for a conversation
+   */
+  getMessages: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    const conversationId = req.params.id;
+    const cursor = req.query.cursor as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    const data = await whatsappModuleService.getMessages(tenantId, conversationId, cursor, limit);
+    return sendSuccess(res, data, "Messages list retrieved");
+  }),
+
+  /**
+   * Send a reply message from the agent dashboard
+   */
+  sendReply: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    const conversationId = req.params.id;
+    const { body, clientMessageId } = req.body;
+    if (!body) throw new ValidationError("Message body is required");
+
+    const message = await whatsappModuleService.sendReply(tenantId, conversationId, body, clientMessageId);
+    return sendSuccess(res, message, "Reply message dispatched");
+  }),
+
+  /**
+   * Lock/Assign a conversation to a staff member
+   */
+  assignConversation: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    const conversationId = req.params.id;
+    const { assignedUserId } = req.body; // Pass null to unassign
+
+    const updated = await whatsappModuleService.assignConversation(tenantId, conversationId, assignedUserId);
+    return sendSuccess(res, updated, "Conversation assignee updated");
+  }),
+
+  /**
+   * Close a conversation thread
+   */
+  closeConversation: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    const conversationId = req.params.id;
+    const closedById = req.user?.id || "system";
+
+    const updated = await whatsappModuleService.closeConversation(tenantId, conversationId, closedById);
+    return sendSuccess(res, updated, "Conversation closed");
+  }),
+
+  /**
+   * Server-Sent Events (SSE) realtime channel for inbox updates
+   */
+  sse: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new UnauthorizedError("Tenant context missing");
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const listener = (event: any) => {
+      if (event.tenantId === tenantId) {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    };
+
+    whatsappEvents.on("WHATSAPP_MESSAGE_RECEIVED", listener);
+    whatsappEvents.on("WHATSAPP_STATUS_UPDATED", listener);
+
+    req.on("close", () => {
+      whatsappEvents.off("WHATSAPP_MESSAGE_RECEIVED", listener);
+      whatsappEvents.off("WHATSAPP_STATUS_UPDATED", listener);
+    });
   }),
 };

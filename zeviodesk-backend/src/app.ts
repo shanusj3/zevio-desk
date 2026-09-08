@@ -22,15 +22,19 @@ export function createApp() {
 
     // Also allow any *.localhost origin (e.g. shop1.localhost:3000)
     const isAllowed =
+      !origin ||
       allowedOrigins.includes(origin) ||
-      /^https?:\/\/[^.]+\.localhost(:\d+)?$/.test(origin);
+      /^https?:\/\/(localhost|127\.0\.0\.1|[^.]+\.localhost)(:\d+)?$/i.test(origin) ||
+      process.env.NODE_ENV !== 'production';
 
-    if (isAllowed) {
+    if (isAllowed && origin) {
       res.header('Access-Control-Allow-Origin', origin);
+    } else if (!origin) {
+      res.header('Access-Control-Allow-Origin', '*');
     }
     res.header('Vary', 'Origin');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-tenant-slug, x-tenant-id, X-Tenant-Slug, X-Tenant-Id');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(200);
@@ -52,7 +56,14 @@ export function createApp() {
       preload: true,
     },
   }));
-  app.use(express.json({ limit: "2mb" }));
+  app.use(
+    express.json({
+      limit: "2mb",
+      verify: (req: any, res, buf) => {
+        req.rawBody = buf;
+      },
+    })
+  );
   app.use(express.urlencoded({ extended: true, limit: "2mb" }));
   app.use(cookieParser());
 

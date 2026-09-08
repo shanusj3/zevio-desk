@@ -1,4 +1,8 @@
 // Central API client - all backend calls go through here
+import { PriceMode, RoundingRule, TaxTreatment } from './tax';
+export * from './tax';
+export * from './warranty';
+
 const BASE_URL = 'http://localhost:3001/api';
 
 // ── Token storage ─────────────────────────────────────────────────────────────
@@ -36,6 +40,34 @@ export async function request<T>(
   }
 
   return json.data as T;
+}
+
+export async function requestWithMeta<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<{ data: T; meta?: any }> {
+  const token = tokenStore.get();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, {
+    credentials: 'include',
+    ...options,
+    headers,
+  });
+
+  const json = await response.json();
+
+  if (!response.ok) {
+    throw new Error(json.message || json.error || 'Request failed');
+  }
+
+  return { data: json.data as T, meta: json.meta };
 }
 
 
@@ -328,10 +360,62 @@ export interface TenantReports {
   };
 }
 
+export interface DashboardStats {
+  openTicketsCount: number;
+  readyPickupCount: number;
+  waitingPartsCount: number;
+  deliveredTodayCount: number;
+  earningsTodayVal: string;
+  earningsTodayNum: number;
+  inDiagnosisCount: number;
+  inProgressCount: number;
+  newReceivedCount: number;
+  unassignedCount: number;
+  overdueCount: number;
+  avgDurationVal: string;
+  pendingInvoicesVal: string;
+  pendingInvoicesNum: number;
+  lowStockCount: number;
+}
+
+export interface DashboardPreferencesData {
+  visibleStatIds: string[] | null;
+  statOrder?: any;
+  alerts: {
+    id: string;
+    statId: string;
+    statName: string;
+    triggerType: 'EVERY' | 'LIMIT';
+    limitValue?: string;
+    enabled: boolean;
+  }[];
+}
+
 export const reportsApi = {
   fetchPlatformMetrics: () => request<PlatformReports>('/reports'),
   fetchTenantMetrics: (startDate: string, endDate: string, page = 1, limit = 10, timezone = 'Asia/Kolkata') =>
     request<TenantReports>(`/reports/tenant?startDate=${startDate}&endDate=${endDate}&page=${page}&limit=${limit}&timezone=${timezone}`),
+  getDashboardStats: () => request<DashboardStats>('/reports/dashboard-stats'),
+  getPreferences: () => request<DashboardPreferencesData>('/reports/preferences'),
+  updatePreferences: (visibleStatIds: string[]) =>
+    request<{ visibleStatIds: string[] }>('/reports/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ visibleStatIds }),
+    }),
+  saveAlert: (alert: { statId: string; statName: string; triggerType: 'EVERY' | 'LIMIT'; limitValue?: string }) =>
+    request<any>('/reports/alerts', {
+      method: 'POST',
+      body: JSON.stringify(alert),
+    }),
+  deleteAlert: (statId: string) =>
+    request<{ statId: string }>(`/reports/alerts/${statId}`, {
+      method: 'DELETE',
+    }),
+  updateTablePreferences: (tableId: string, visibleColumnIds: Record<string, boolean>, columnOrder: string[]) =>
+    request<any>('/reports/preferences/table', {
+      method: 'PUT',
+      body: JSON.stringify({ tableId, visibleColumnIds, columnOrder }),
+    }),
 };
 
 // ─── Payments ────────────────────────────────────────────────────────────────
@@ -356,6 +440,10 @@ export const paymentsApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  delete: (ticketId: string, paymentId: string) =>
+    request<{ message: string }>(`/tickets/${ticketId}/payments/${paymentId}`, {
+      method: 'DELETE',
+    }),
 };
 
 // ─── Tickets ─────────────────────────────────────────────────────────────────
@@ -366,13 +454,20 @@ export interface Ticket {
   assignedToId: string | null;
   /** Human-facing ticket reference (random per tenant). */
   jobNumber?: string;
+  ticketNumber?: string;
+  trackingToken?: string;
+  publicToken?: string;
+  customerNote?: string;
   title: string;
   description: string;
-  status: 'RECEIVED' | 'DIAGNOSING' | 'WAITING_FOR_PARTS' | 'IN_PROGRESS' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED';
-  priority: 'NORMAL' | 'URGENT' | 'WARRANTY';
+  status: 'RECEIVED' | 'DIAGNOSING' | 'WAITING_FOR_PARTS' | 'IN_PROGRESS' | 'REPAIR_COMPLETED' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'DELIVERED' | 'CANCELLED';
+  priority: 'NORMAL' | 'URGENT';
   itemCategory?: string | null;
   brand?: string | null;
   model?: string | null;
+  globalCatalogItemId?: string | null;
+  tenantCatalogItemId?: string | null;
+  source?: 'CATALOG' | 'CUSTOM' | string | null;
   serialNumber?: string | null;
   itemCondition?: string | null;
   accessories?: string | null;
@@ -427,9 +522,22 @@ export interface Ticket {
 
 export interface FetchTicketsParams {
   status?: string;
+  priority?: string;
+  search?: string;
   statusIn?: string[];  // multiple status filter — sent as ?statusIn=RECEIVED,DIAGNOSING
   startDate?: string;
   endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedTicketsResult {
+  tickets: Ticket[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
 }
 
 /** Typed payload for creating a new ticket — replaces `Partial<Ticket> as any` at call sites. */
@@ -438,20 +546,25 @@ export interface CreateTicketPayload {
   customerId: string;
   title: string;
   description: string;
-  priority: 'NORMAL' | 'URGENT' | 'WARRANTY';
+  priority: 'NORMAL' | 'URGENT';
   status: 'RECEIVED';
   assignedToId?: string;
   itemCategory?: string;
   brand?: string;
   model?: string;
+  globalCatalogItemId?: string;
+  tenantCatalogItemId?: string;
+  source?: 'CATALOG' | 'CUSTOM';
   serialNumber?: string;
   itemCondition?: string;
   accessories?: string;
   reportedIssue?: string;
+  internalNotes?: string;
   estimatedCost?: number;
   advanceAmount?: number;
   paymentMethod?: string;
   advanceNotes?: string;
+  attachmentIds?: string[];
   attachments?: {
     id: string;
     url: string;
@@ -469,19 +582,39 @@ export const ticketsApi = {
   readyForPickup: () => request<ReadyForPickupTicket[]>('/tickets/ready-for-pickup'),
 
   deliver: (id: string) => request<Ticket>(`/tickets/${id}/deliver`, { method: 'POST' }),
-  fetchAll: async (params: FetchTicketsParams = {}): Promise<Ticket[]> => {
+  fetchPaginated: async (params: FetchTicketsParams = {}): Promise<PaginatedTicketsResult> => {
     const searchParams = new URLSearchParams();
-    if (params.status && params.status !== 'All') {
-      searchParams.append('status', params.status);
-    }
-    if (params.statusIn && params.statusIn.length > 0) {
-      searchParams.append('statusIn', params.statusIn.join(','));
-    }
+    if (params.status && params.status !== 'All') searchParams.append('status', params.status);
+    if (params.priority && params.priority !== 'All') searchParams.append('priority', params.priority);
+    if (params.search && params.search.trim()) searchParams.append('search', params.search.trim());
+    if (params.statusIn && params.statusIn.length > 0) searchParams.append('statusIn', params.statusIn.join(','));
     if (params.startDate) searchParams.append('startDate', params.startDate);
     if (params.endDate) searchParams.append('endDate', params.endDate);
+    if (params.page) searchParams.append('page', params.page.toString());
+    if (params.limit) searchParams.append('limit', params.limit.toString());
+
     const queryStr = searchParams.toString();
     const url = queryStr ? `/tickets?${queryStr}` : '/tickets';
-    return request<Ticket[]>(url);
+    const response = await requestWithMeta<Ticket[]>(url);
+    const tickets = Array.isArray(response.data) ? response.data : [];
+    const meta = response.meta || {};
+    const total = meta.total ?? meta.totalCount ?? tickets.length;
+    const page = meta.page ?? (params.page || 1);
+    const limit = meta.limit ?? (params.limit || 20);
+    const totalPages = meta.totalPages ?? Math.max(1, Math.ceil(total / limit));
+
+    return {
+      tickets,
+      total,
+      page,
+      limit,
+      totalPages,
+      hasMore: page < totalPages,
+    };
+  },
+  fetchAll: async (params: FetchTicketsParams = {}): Promise<Ticket[]> => {
+    const res = await ticketsApi.fetchPaginated({ ...params, limit: params.limit || 1000 });
+    return res.tickets;
   },
 
   fetchOne: (id: string) => request<Ticket>(`/tickets/${id}`),
@@ -515,6 +648,13 @@ export const ticketsApi = {
         body: JSON.stringify({ contentType, fileType }),
       }
     ),
+
+  repairCompleted: () => request<ReadyForPickupTicket[]>('/tickets/repair-completed'),
+
+  completeRepair: (id: string) =>
+    request<Ticket>(`/tickets/${id}/complete-repair`, {
+      method: 'POST',
+    }),
 
   uploadAttachment: async (
     url: string,
@@ -812,6 +952,13 @@ export interface InvoicingSettings {
   gstNumber?: string | null;
   logoUrl?: string | null;
   description?: string | null;
+  inventoryEnabled?: boolean;
+  gstRegistered?: boolean;
+  businessState?: string | null;
+  defaultPriceMode?: PriceMode;
+  taxRoundingRule?: RoundingRule;
+  primaryColor?: string;
+  secondaryColor?: string;
 }
 
 export const invoiceSettingsApi = {
@@ -822,3 +969,382 @@ export const invoiceSettingsApi = {
       body: JSON.stringify(data),
     }),
 };
+
+// ── Inventory Module ──────────────────────────────────────────────────────────
+
+export * from './tax';
+
+export type WarrantyType = 'NONE' | 'SHOP' | 'MANUFACTURER';
+export type WarrantyUnit = 'DAYS' | 'MONTHS' | 'YEARS';
+export type ItemType = 'PART' | 'SERVICE';
+export type TaxType = 'CGST_SGST' | 'IGST' | 'EXEMPT';
+export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'VOID' | 'REFUNDED';
+
+export interface WarrantySnapshot {
+  warrantyType: WarrantyType;
+  warrantyDuration: number;
+  warrantyUnit: WarrantyUnit;
+  hasShopWarranty?: boolean;
+  shopWarrantyDuration?: number;
+  shopWarrantyUnit?: WarrantyUnit;
+  hasManufacturerWarranty?: boolean;
+  mfrWarrantyDuration?: number;
+  mfrWarrantyUnit?: WarrantyUnit;
+  warrantyTerms?: string | null;
+}
+
+export interface InventoryItem {
+  id: string;
+  tenantId: string;
+  name: string;
+  itemType?: ItemType;
+  sku: string | null;
+  hsnCode?: string | null;
+  sacCode?: string | null;
+  barcode: string | null;
+  brand: string | null;
+  category: string | null;
+  description: string | null;
+  costPrice: string | null;
+  sellingPrice: string;
+  onHandStock: number;
+  reservedStock: number;
+  availableStock: number;
+  currentStock: number;
+  minimumStock: number;
+  location: string | null;
+  warrantyType?: WarrantyType;
+  warrantyDuration?: number;
+  warrantyUnit?: WarrantyUnit;
+  hasShopWarranty?: boolean;
+  shopWarrantyDuration?: number;
+  shopWarrantyUnit?: WarrantyUnit;
+  hasManufacturerWarranty?: boolean;
+  mfrWarrantyDuration?: number;
+  mfrWarrantyUnit?: WarrantyUnit;
+  warrantyPeriod?: string | null;
+  warrantyTerms?: string | null;
+  gstRate?: string | null;
+  taxType?: TaxType;
+  taxTreatment?: TaxTreatment;
+  taxExemptionReason?: string | null;
+  priceMode?: PriceMode;
+  supplierName?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryTransaction {
+  id: string;
+  tenantId: string;
+  inventoryItemId: string;
+  type: 'PURCHASE' | 'RESERVATION' | 'RELEASE' | 'CONSUMPTION' | 'ADJUSTMENT' | 'RETURN' | 'DAMAGE';
+  direction: 'IN' | 'OUT';
+  quantity: number;
+  previousOnHand: number;
+  newOnHand: number;
+  previousReserved: number;
+  newReserved: number;
+  referenceType: 'TICKET' | 'INVOICE' | 'PURCHASE_ORDER' | 'MANUAL';
+  referenceId: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface StockMovement {
+  id: string;
+  tenantId: string;
+  inventoryItemId: string;
+  type: 'STOCK_IN' | 'STOCK_OUT' | 'ADJUSTMENT' | 'RETURN';
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string | null;
+  reference: string | null;
+  ticketLineItemId: string | null;
+  createdById: string | null;
+  createdAt: string;
+}
+
+export interface InventorySearchResult {
+  id: string;
+  name: string;
+  itemType?: ItemType;
+  sku: string | null;
+  brand: string | null;
+  category: string | null;
+  costPrice: string | null;
+  sellingPrice: string;
+  onHandStock: number;
+  reservedStock: number;
+  availableStock: number;
+  currentStock: number;
+  minimumStock: number;
+  warrantyType?: WarrantyType;
+  warrantyDuration?: number;
+  warrantyUnit?: WarrantyUnit;
+  hasShopWarranty?: boolean;
+  shopWarrantyDuration?: number;
+  shopWarrantyUnit?: WarrantyUnit;
+  hasManufacturerWarranty?: boolean;
+  mfrWarrantyDuration?: number;
+  mfrWarrantyUnit?: WarrantyUnit;
+  warrantyPeriod?: string | null;
+  gstRate?: string | null;
+  taxType?: TaxType;
+  isActive: boolean;
+}
+
+export interface InvoiceItemSnapshot {
+  id: string;
+  invoiceId: string;
+  itemType: ItemType;
+  productId?: string | null;
+  itemName: string;
+  sku?: string | null;
+  quantity: number;
+  unitPrice: number;
+  costPrice: number;
+  discountType?: 'PERCENTAGE' | 'FIXED' | null;
+  discountValue?: number | null;
+  discountAmount: number;
+  allocatedInvoiceDiscount: number;
+  taxableAmount: number;
+  taxRate: number;
+  taxType: TaxType;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  warrantyType: WarrantyType;
+  warrantyDuration: number;
+  warrantyUnit: WarrantyUnit;
+  hasShopWarranty?: boolean;
+  shopWarrantyDuration?: number;
+  shopWarrantyUnit?: WarrantyUnit;
+  hasManufacturerWarranty?: boolean;
+  mfrWarrantyDuration?: number;
+  mfrWarrantyUnit?: WarrantyUnit;
+  lineTotal: number;
+}
+
+export interface AuditLog {
+  id: string;
+  tenantId: string;
+  actorId: string;
+  action: string;
+  entityType: 'PRODUCT' | 'TICKET' | 'INVOICE' | 'INVOICE_ITEM' | 'STOCK' | 'PAYMENT' | 'CUSTOMER' | 'WARRANTY' | 'USER';
+  entityId: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export const inventoryApi = {
+  list: (params?: {
+    search?: string;
+    category?: string;
+    lowStockOnly?: boolean;
+    includeInactive?: boolean;
+    skip?: number;
+    take?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.search)          qs.set('search',          params.search);
+    if (params?.category)        qs.set('category',        params.category);
+    if (params?.lowStockOnly)    qs.set('lowStockOnly',    'true');
+    if (params?.includeInactive) qs.set('includeInactive', 'true');
+    if (params?.skip != null)    qs.set('skip',            String(params.skip));
+    if (params?.take != null)    qs.set('take',            String(params.take));
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return request<{ items: InventoryItem[]; total: number }>(`/inventory${query}`);
+  },
+
+  search: (q: string, category?: string, limit = 12) => {
+    const qs = new URLSearchParams();
+    if (q) qs.set('q', q);
+    if (category) qs.set('category', category);
+    qs.set('limit', String(limit));
+    return request<InventorySearchResult[]>(`/inventory/search?${qs.toString()}`);
+  },
+
+  categories: () => request<string[]>('/inventory/categories'),
+  createCategory: (name: string) =>
+    request<{ name: string }>('/inventory/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  renameCategory: (data: { oldName: string; newName: string }) =>
+    request<{ oldName: string; newName: string }>('/inventory/categories/rename', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteCategory: (name: string) => request<{ category: string }>(`/inventory/categories/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
+  getOne: (id: string) => request<InventoryItem>(`/inventory/${id}`),
+
+  create: (data: {
+    name: string;
+    sku?: string;
+    barcode?: string;
+    brand?: string;
+    category?: string;
+    description?: string;
+    costPrice?: number;
+    sellingPrice: number;
+    currentStock?: number;
+    minimumStock?: number;
+    location?: string;
+  }) =>
+    request<InventoryItem>('/inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: Partial<{
+    name: string; sku: string; barcode: string; brand: string; category: string;
+    description: string; costPrice: number; sellingPrice: number;
+    minimumStock: number; location: string;
+  }>) =>
+    request<InventoryItem>(`/inventory/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deactivate: (id: string) =>
+    request<{ id: string }>(`/inventory/${id}`, { method: 'DELETE' }),
+
+  adjustStock: (id: string, quantity: number, reason?: string) =>
+    request<{ previousStock: number; newStock: number; delta: number }>(
+      `/inventory/${id}/adjust`,
+      { method: 'POST', body: JSON.stringify({ quantity, reason }) }
+    ),
+
+  movements: (id: string, skip = 0, take = 30) =>
+    request<{ movements: StockMovement[]; total: number }>(
+      `/inventory/${id}/movements?skip=${skip}&take=${take}`
+    ),
+
+  setEnabled: (enabled: boolean) =>
+    request<{ inventoryEnabled: boolean }>('/inventory/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    }),
+};
+
+// ─── WhatsApp ───────────────────────────────────────────────────────────────
+export interface WhatsAppConversation {
+  id: string;
+  tenantId: string;
+  contactId: string;
+  assignedUserId: string | null;
+  status: 'OPEN' | 'CLOSED';
+  lastInboundAt: string | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  closedAt: string | null;
+  closedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  contact: {
+    id: string;
+    phoneNumber: string;
+    profileName: string | null;
+    customerId: string | null;
+  };
+}
+
+export interface WhatsAppMessage {
+  id: string;
+  tenantId: string;
+  conversationId: string;
+  whatsappMessageId: string | null;
+  direction: 'INBOUND' | 'OUTBOUND';
+  type: 'TEXT' | 'TEMPLATE' | 'IMAGE' | 'DOCUMENT';
+  body: string | null;
+  status: 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export const whatsappApi = {
+  getStatus: () =>
+    request<{
+      connected: boolean;
+      wabaId?: string;
+      phoneNumberId?: string;
+      status?: string;
+      ticketCreatedEnabled?: boolean;
+      readyForPickupEnabled?: boolean;
+      ticketCompletedEnabled?: boolean;
+      metaAppId?: string;
+      metaConfigId?: string;
+    }>('/whatsapp/status'),
+
+  connect: (wabaId: string, phoneNumberId: string, accessToken: string) =>
+    request<{ success: boolean }>('/whatsapp/connect', {
+      method: 'POST',
+      body: JSON.stringify({ wabaId, phoneNumberId, accessToken }),
+    }),
+
+  completeEmbeddedSignup: (code: string) =>
+    request<{ success: boolean }>('/whatsapp/embedded-signup/complete', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    }),
+
+  disconnect: () =>
+    request<{ success: boolean }>('/whatsapp/disconnect', { method: 'POST' }),
+
+  toggleAutomation: (type: 'ticketCreated' | 'readyForPickup' | 'ticketCompleted', enabled: boolean) =>
+    request<{ success: boolean }>('/whatsapp/toggle-automation', {
+      method: 'POST',
+      body: JSON.stringify({ type, enabled }),
+    }),
+
+  getConversations: (status?: string) =>
+    request<WhatsAppConversation[]>(`/whatsapp/conversations${status ? `?status=${status}` : ''}`),
+
+  getMessages: (conversationId: string, cursor?: string) =>
+    request<{ messages: WhatsAppMessage[]; nextCursor?: string }>(
+      `/whatsapp/conversations/${conversationId}/messages${cursor ? `?cursor=${cursor}` : ''}`
+    ),
+
+  sendReply: (conversationId: string, body: string, clientMessageId?: string) =>
+    request<WhatsAppMessage>(`/whatsapp/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body, clientMessageId }),
+    }),
+
+  assignConversation: (conversationId: string, assignedUserId: string | null) =>
+    request<WhatsAppConversation>(`/whatsapp/conversations/${conversationId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ assignedUserId }),
+    }),
+
+  closeConversation: (conversationId: string) =>
+    request<WhatsAppConversation>(`/whatsapp/conversations/${conversationId}/close`, {
+      method: 'POST',
+    }),
+};
+
+export interface PublicTenantInfo {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  primaryColor?: string;
+  secondaryColor?: string;
+}
+
+export const publicApi = {
+  getTenantPublicInfo: (slug: string) => request<PublicTenantInfo>(`/public/tenant/${slug}`),
+};
+
+
+
+

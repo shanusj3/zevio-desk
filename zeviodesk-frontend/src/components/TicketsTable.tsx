@@ -6,398 +6,848 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Check,
-  Loader2,
+  X,
+  ChevronDown,
   Ticket as TicketIcon,
-  AlertTriangle,
   User,
-  Clock,
+  Upload,
+  SlidersHorizontal,
+  GripVertical,
+  Loader2,
 } from 'lucide-react';
-import { Ticket } from '../lib/api';
-import { useTicketsQuery } from '../hooks/useTicketsQuery';
+
+import { Ticket, FetchTicketsParams, reportsApi } from '../lib/api';
+import { useInfiniteTicketsQuery } from '../hooks/useTicketsQuery';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowSkeleton } from './Skeleton';
 import { useAppStore } from '../store/useAppStore';
-import { getStatusLabel, getStatusBadge } from '../lib/ticketDisplay';
+import { getStatusLabel, getStatusBadge, getPriorityBadge, getPriorityTextStyle, getWarrantyDisplay } from '../lib/ticketDisplay';
+import { StatusBadge } from './StatusBadge';
 
 interface TicketsTableProps {
+  isHeaderOut?: boolean;
   onSelectTicket: (ticket: Ticket) => void;
   onEditTicket?: (ticket: Ticket) => void;
   onDeleteTicket?: (ticket: Ticket) => void;
-  // If provided, use these tickets directly (from parent with date filter applied)
   filteredTickets?: Ticket[];
+  onTotalCountChange?: (count: number) => void;
+  onFilteredCountChange?: (count: number) => void;
+  onFiltersChange?: (filters: FetchTicketsParams) => void;
+  onExportClick?: () => void;
 }
 
+const STATUS_OPTIONS = [
+  { value: 'All', label: 'All Status' },
+  { value: 'RECEIVED', label: 'New' },
+  { value: 'DIAGNOSING', label: 'Diagnosis' },
+  { value: 'WAITING_FOR_PARTS', label: 'Waiting for Parts' },
+  { value: 'IN_PROGRESS', label: 'Repair in Progress' },
+  { value: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
+  { value: 'COMPLETED', label: 'Delivered' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+] as const;
+
+const PRIORITIES = ['All', 'NORMAL', 'URGENT'] as const;
+
+const DATE_PRESETS = ['All Time', 'Today', 'This Week', 'This Month', 'Custom Range'] as const;
+
+type StatusFilter =
+  | 'All'
+  | 'RECEIVED'
+  | 'DIAGNOSING'
+  | 'WAITING_FOR_PARTS'
+  | 'IN_PROGRESS'
+  | 'READY_FOR_PICKUP'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+type PriorityFilter = 'All' | 'NORMAL' | 'URGENT';
+
 export const TicketsTable: React.FC<TicketsTableProps> = ({
+  isHeaderOut = false,
   onSelectTicket,
   onEditTicket,
   onDeleteTicket,
-  filteredTickets: parentFilteredTickets,
+  onTotalCountChange,
+  onFilteredCountChange,
+  onFiltersChange,
+  onExportClick,
 }) => {
+  const queryClient = useQueryClient();
+  const { showToast } = useAppStore();
+
   const [searchInput, setSearchInput] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'RECEIVED' | 'DIAGNOSING' | 'WAITING_FOR_PARTS' | 'IN_PROGRESS' | 'READY_FOR_PICKUP' | 'COMPLETED' | 'CANCELLED'>('All');
-  const [priorityFilter, setPriorityFilter] = useState<'All' | 'NORMAL' | 'URGENT' | 'WARRANTY'>('All');
-  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('All');
+  const [datePreset, setDatePreset] = useState<string>('All Time');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
+  const [isFilterDrawerMounted, setIsFilterDrawerMounted] = useState(false);
+  const [isFilterDrawerVisible, setIsFilterDrawerVisible] = useState(false);
+  const [isCustomizationMounted, setIsCustomizationMounted] = useState(false);
+  const [isCustomizationVisible, setIsCustomizationVisible] = useState(false);
+
+  const [statusSectionOpen, setStatusSectionOpen] = useState(true);
+  const [prioritySectionOpen, setPrioritySectionOpen] = useState(true);
+  const [dateSectionOpen, setDateSectionOpen] = useState(true);
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
 
-  const { currentUser } = useAppStore();
-  const { data: allTickets = [], isLoading, isFetching } = useTicketsQuery();
-
-  // If parent passes filteredTickets (dashboard), use those. Otherwise show all tickets from API.
-  const baseTickets = parentFilteredTickets !== undefined ? parentFilteredTickets : allTickets;
-
-  const filterRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setIsFilterDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Filter and search logic
-  const filteredTickets = baseTickets.filter((ticket) => {
-    // Search filter
-    const searchLower = searchInput.toLowerCase();
-    const matchesSearch =
-      ticket.title.toLowerCase().includes(searchLower) ||
-      ticket.description.toLowerCase().includes(searchLower) ||
-      (ticket.customer?.name || '').toLowerCase().includes(searchLower) ||
-      (ticket.assignedTo?.name || '').toLowerCase().includes(searchLower);
-
-    // Status filter
-    const matchesStatus = statusFilter === 'All' || ticket.status === statusFilter;
-
-    // Priority filter
-    const matchesPriority = priorityFilter === 'All' || ticket.priority === priorityFilter;
-
-    return matchesSearch && matchesStatus && matchesPriority;
+  // Column preferences
+  const [visibleColumns, setVisibleColumns] = useState({
+    ticketDetails: true, // Mandatory
+    customer: true,
+    assignee: true,
+    priority: true,
+    warranty: true,
+    status: true,
+    createdAt: true,
   });
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'ticketDetails',
+    'customer',
+    'assignee',
+    'priority',
+    'warranty',
+    'status',
+    'createdAt',
+  ]);
+
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [colSearch, setColSearch] = useState('');
+
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  // Fetch DB Preferences to restore table column preferences
+  const { data: dbPreferences } = useQuery({
+    queryKey: ['dashboard-preferences'],
+    queryFn: reportsApi.getPreferences,
+  });
+
+  useEffect(() => {
+    if (dbPreferences?.statOrder && (dbPreferences.statOrder as any).tickets) {
+      const saved = (dbPreferences.statOrder as any).tickets;
+      if (saved.visibleColumnIds) setVisibleColumns(saved.visibleColumnIds);
+      if (saved.columnOrder) setColumnOrder(saved.columnOrder);
+    }
+  }, [dbPreferences]);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Calculate startDate & endDate from presets
+  const getDateRange = () => {
+    const now = new Date();
+    if (datePreset === 'Today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+      return { startDate: start, endDate: end };
+    }
+    if (datePreset === 'This Week') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      return { startDate: d.toISOString(), endDate: now.toISOString() };
+    }
+    if (datePreset === 'This Month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      return { startDate: start, endDate: now.toISOString() };
+    }
+    if (datePreset === 'Custom Range' && (customStartDate || customEndDate)) {
+      return {
+        startDate: customStartDate ? new Date(customStartDate).toISOString() : undefined,
+        endDate: customEndDate ? new Date(customEndDate + 'T23:59:59').toISOString() : undefined,
+      };
+    }
+    return { startDate: undefined, endDate: undefined };
+  };
+
+  const { startDate, endDate } = getDateRange();
+
+  const queryParams: Omit<FetchTicketsParams, 'page'> = {
+    status: statusFilter,
+    priority: priorityFilter,
+    search: debouncedSearch,
+    startDate,
+    endDate,
+  };
+
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useInfiniteTicketsQuery(queryParams);
+
+  const tickets = infiniteData ? infiniteData.pages.flatMap((page) => page.tickets) : [];
+  const totalCount = infiniteData?.pages[0]?.total ?? 0;
+
+  // Sync counts & filters to parent
+  useEffect(() => {
+    onTotalCountChange?.(totalCount);
+    onFilteredCountChange?.(totalCount);
+  }, [totalCount, onTotalCountChange, onFilteredCountChange]);
+
+  useEffect(() => {
+    onFiltersChange?.({
+      status: statusFilter,
+      priority: priorityFilter,
+      search: debouncedSearch,
+      startDate,
+      endDate,
+    });
+  }, [statusFilter, priorityFilter, debouncedSearch, startDate, endDate, onFiltersChange]);
+
+  // True Infinite Scroll via IntersectionObserver with 300px rootMargin
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const custCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openFilterDrawer = () => {
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    setIsFilterDrawerMounted(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setIsFilterDrawerVisible(true));
+    });
+  };
+
+  const closeFilterDrawer = () => {
+    setIsFilterDrawerVisible(false);
+    closeTimeoutRef.current = setTimeout(() => setIsFilterDrawerMounted(false), 250);
+  };
+
+  const openCustomization = () => {
+    if (custCloseTimeoutRef.current) clearTimeout(custCloseTimeoutRef.current);
+    setIsCustomizationMounted(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setIsCustomizationVisible(true));
+    });
+  };
+
+  const closeCustomization = () => {
+    setIsCustomizationVisible(false);
+    custCloseTimeoutRef.current = setTimeout(() => setIsCustomizationMounted(false), 250);
+  };
+
+  const handleApplyColumnPreferences = async () => {
+    try {
+      await reportsApi.updateTablePreferences('tickets', visibleColumns, columnOrder);
+      queryClient.invalidateQueries({ queryKey: ['dashboard-preferences'] });
+      showToast('Table column layout saved to database', 'success');
+    } catch (err: any) {
+      showToast('Failed to save table columns to database', 'warning');
+    }
+    closeCustomization();
+  };
+
+  const handleDragStart = (index: number) => setDraggedIndex(index);
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (index: number) => {
+    if (draggedIndex === null) return;
+    const items = Array.from(columnOrder);
+    const [reorderedItem] = items.splice(draggedIndex, 1);
+    items.splice(index, 0, reorderedItem);
+    setColumnOrder(items);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const activeFilterCount =
+    (statusFilter !== 'All' ? 1 : 0) +
+    (priorityFilter !== 'All' ? 1 : 0) +
+    (datePreset !== 'All Time' ? 1 : 0);
+
+  const hasFilters = activeFilterCount > 0;
+
+  const activeColCount =
+    2 +
+    (visibleColumns.customer ? 1 : 0) +
+    (visibleColumns.assignee ? 1 : 0) +
+    (visibleColumns.priority ? 1 : 0) +
+    (visibleColumns.status ? 1 : 0) +
+    (visibleColumns.createdAt ? 1 : 0);
+
+  const clearAllFilters = () => {
+    setStatusFilter('All');
+    setPriorityFilter('All');
+    setDatePreset('All Time');
+    setCustomStartDate('');
+    setCustomEndDate('');
+    setSearchInput('');
+  };
 
   const getPriorityColor = (priority: Ticket['priority']) => {
     switch (priority) {
       case 'URGENT':
-        return 'bg-[#7F1D1D]/80 text-[#F87171] border border-[#DC2626]/30';
-      case 'WARRANTY':
-        return 'bg-[#1E3A8A]/80 text-[#93C5FD] border border-[#2563EB]/30';
+        return 'bg-[#7F1D1D] text-[#fee2e2] border border-[#DC2626]/40';
       case 'NORMAL':
-        return 'bg-[#78350F]/80 text-[#FCD34D] border border-[#D97706]/30';
       default:
-        return 'bg-[#1e293b] text-[#94a3b8]';
-    }
-  };
-
-  const getStatusColor = (status: Ticket['status']) => {
-    switch (status) {
-      case 'RECEIVED':
-        return 'bg-[#1E3A8A]/80 text-[#93C5FD] border border-[#2563EB]/30';
-      case 'DIAGNOSING':
-        return 'bg-[#4C1D95]/80 text-[#C4B5FD] border border-[#7C3AED]/30';
-      case 'WAITING_FOR_PARTS':
-        return 'bg-[#78350F]/80 text-[#FCD34D] border border-[#D97706]/30';
-      case 'IN_PROGRESS':
-        return 'bg-[#854D0E]/80 text-[#FDE68A] border border-[#CA8A04]/30';
-      case 'READY_FOR_PICKUP':
-        return 'bg-[#14532D]/80 text-[#86EFAC] border border-[#16A34A]/30';
-      case 'COMPLETED':
-        return 'bg-[#064E3B]/80 text-[#34D399] border border-[#059669]/30';
-      case 'CANCELLED':
-        return 'bg-[#1e293b]/80 text-[#94a3b8] border border-[#334155]/30';
-      default:
-        return 'bg-[#1e293b] text-[#94a3b8]';
+        return 'bg-[#78350F] text-[#ffedd5] border border-[#D97706]/40';
     }
   };
 
   return (
-    <div className="bg-[#101622] border border-[#1b2536] rounded-lg shadow-xl overflow-hidden">
-      {/* Top Header Controls Bar */}
-      <div className="p-5 border-b border-[#1b2536] space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h3 className="text-lg font-bold text-white tracking-tight">
-            Support Tickets
-          </h3>
-
-          {/* Search Input & Filter Dropdown */}
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            {/* Search Input Box */}
-            <div className="relative flex-1 md:w-80">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B]" />
-              <input
-                type="text"
-                placeholder="Search tickets..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full h-11 bg-[#162030] border border-[#22314a] rounded-lg pl-10 pr-4 text-xs text-white placeholder-[#64748B] focus:outline-none focus:border-[#D99B26] transition-colors"
-              />
-            </div>
-
-            {/* Filter Dropdown */}
-            <div className="relative" ref={filterRef}>
+    <div className="bg-white border border-[#e2e8f0] rounded-xl shadow-sm overflow-hidden">
+      {/* Top Controls Header Bar */}
+      <div className="p-3 px-4 border-b border-[#e2e8f0]">
+        <div className="flex flex-col md:flex-row md:items-center justify-end gap-3">
+          {/* Right Side: Filters, Search, CSV Export, Customize Columns */}
+          <div className="flex items-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto">
+            {/* Filter Button */}
+            <div className="relative">
               <button
-                onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-                className={`px-4 h-11 rounded-lg text-xs font-semibold flex items-center gap-2 border transition-colors ${
-                  statusFilter !== 'All' || priorityFilter !== 'All'
-                    ? 'bg-[#D99B26]/20 text-[#D99B26] border-[#D99B26]/40'
-                    : 'bg-[#162030] text-[#94A3B8] hover:text-white border-[#22314a]'
+                onClick={openFilterDrawer}
+                className={`px-4 h-9 rounded-full text-sm font-medium flex items-center gap-2 border transition-all cursor-pointer bg-white text-primary hover:bg-primary hover:text-white hover:border-primary ${
+                  hasFilters ? 'border-primary/40 bg-primary/10' : 'border-[#e2e8f0]'
                 }`}
               >
-                <Filter className="w-3.5 h-3.5" />
+                <Filter className="w-4 h-4 animate-in fade-in" />
                 <span>Filter</span>
-                {(statusFilter !== 'All' || priorityFilter !== 'All') && (
-                  <span className="bg-[#D99B26] text-[#0d121c] font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
-                    {(statusFilter !== 'All' ? 1 : 0) + (priorityFilter !== 'All' ? 1 : 0)}
-                  </span>
-                )}
               </button>
+              {hasFilters && (
+                <span className="absolute -top-1.5 -right-1.5 bg-primary text-white font-semibold text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm pointer-events-none animate-in scale-in duration-150">
+                  {activeFilterCount}
+                </span>
+              )}
+            </div>
 
-              {isFilterDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-[#121824] border border-[#22314a] rounded-xl shadow-2xl z-40 p-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150 max-h-[60vh] overflow-y-auto">
-                  {/* Status Group — Active */}
-                  <div className="space-y-1">
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-[#475569] px-1 pb-0.5 border-b border-[#1e293b]">
-                      Active
-                    </div>
-                    {([
-                      { value: 'All', label: 'All Active' },
-                      { value: 'RECEIVED', label: 'New' },
-                      { value: 'DIAGNOSING', label: 'Diagnosis' },
-                      { value: 'WAITING_FOR_PARTS', label: 'Waiting for Parts' },
-                      { value: 'IN_PROGRESS', label: 'Repair in Progress' },
-                      { value: 'READY_FOR_PICKUP', label: 'Ready for Pickup' },
-                    ] as const).map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => setStatusFilter(value as typeof statusFilter)}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 text-[11px] rounded-lg transition-colors ${
-                          statusFilter === value
-                            ? 'bg-[#D99B26]/15 text-[#D99B26] font-semibold'
-                            : 'text-[#94A3B8] hover:text-white hover:bg-[#182030]'
-                        }`}
-                      >
-                        <span>{label}</span>
-                        {statusFilter === value && <Check className="w-3 h-3" />}
-                      </button>
-                    ))}
-                  </div>
+            {/* Export CSV Button */}
+            <button
+              onClick={onExportClick}
+              className="w-9 h-9 flex items-center justify-center border border-[#e2e8f0] hover:border-primary rounded-full hover:bg-primary hover:text-white transition-all text-primary cursor-pointer"
+              title="Export CSV"
+            >
+              <Upload className="w-4 h-4" />
+            </button>
 
-                  {/* Status Group — Closed */}
-                  <div className="space-y-1">
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-[#475569] px-1 pb-0.5 border-b border-[#1e293b]">
-                      Closed
-                    </div>
-                    {([
-                      { value: 'COMPLETED', label: 'Delivered' },
-                      { value: 'CANCELLED', label: 'Cancelled' },
-                    ] as const).map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => setStatusFilter(value as typeof statusFilter)}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 text-[11px] rounded-lg transition-colors ${
-                          statusFilter === value
-                            ? 'bg-[#D99B26]/15 text-[#D99B26] font-semibold'
-                            : 'text-[#94A3B8] hover:text-white hover:bg-[#182030]'
-                        }`}
-                      >
-                        <span>{label}</span>
-                        {statusFilter === value && <Check className="w-3 h-3" />}
-                      </button>
-                    ))}
-                  </div>
+            {/* Customize Columns Button */}
+            <button
+              onClick={openCustomization}
+              className="w-9 h-9 flex items-center justify-center border border-[#e2e8f0] hover:border-primary rounded-full hover:bg-primary hover:text-white transition-all text-primary cursor-pointer"
+              title="Customize Columns"
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
 
-                  <div className="border-t border-[#22314a]" />
-
-                  {/* Priority Group */}
-                  <div className="space-y-1">
-                    <div className="text-[9px] font-bold uppercase tracking-widest text-[#475569] px-1 pb-0.5 border-b border-[#1e293b]">
-                      Priority
-                    </div>
-                    {(['All', 'NORMAL', 'URGENT', 'WARRANTY'] as const).map((pr) => (
-                      <button
-                        key={pr}
-                        onClick={() => setPriorityFilter(pr)}
-                        className={`w-full flex items-center justify-between px-2 py-1.5 text-[11px] rounded-lg transition-colors ${
-                          priorityFilter === pr
-                            ? 'bg-[#D99B26]/15 text-[#D99B26] font-semibold'
-                            : 'text-[#94A3B8] hover:text-white hover:bg-[#182030]'
-                        }`}
-                      >
-                        <span>{pr === 'All' ? 'All Priorities' : pr.charAt(0) + pr.slice(1).toLowerCase()}</span>
-                        {priorityFilter === pr && <Check className="w-3 h-3" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            {/* Backend Search Input */}
+            <div className="relative flex-1 md:w-80">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-primary" />
+              <input
+                type="text"
+                placeholder="Search by ticket #, job #, phone, device model..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full h-9 bg-white border border-[#e2e8f0] rounded-full pl-9 pr-4 text-xs text-[#1e293b] placeholder-[#94a3b8] focus:outline-none focus:border-primary transition-colors"
+              />
+              {searchInput && (
+                <button
+                  onClick={() => setSearchInput('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#1e293b]"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Table Section */}
+      {/* Filter Drawer */}
+      {isFilterDrawerMounted && (
+        <div className="fixed inset-0 top-12 z-40 flex justify-end">
+          <div
+            className="absolute inset-0 bg-black/30 transition-opacity duration-200 ease-out"
+            style={{ opacity: isFilterDrawerVisible ? 1 : 0 }}
+            onClick={closeFilterDrawer}
+          />
+
+          <div
+            className="relative w-full max-w-[400px] h-full bg-white shadow-2xl flex flex-col transition-transform duration-200 ease-out z-10"
+            style={{
+              transform: isFilterDrawerVisible ? 'translateX(0)' : 'translateX(100%)',
+            }}
+          >
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#e2e8f0]">
+              <h2 className="text-base font-semibold text-[#1e293b]">Filter tickets</h2>
+              <button
+                onClick={closeFilterDrawer}
+                className="p-1.5 text-[#64748B] hover:text-[#1e293b] hover:bg-[#f1f5f9] rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* Status Section */}
+              <div>
+                <button
+                  onClick={() => setStatusSectionOpen(!statusSectionOpen)}
+                  className="w-full px-6 flex items-center justify-between py-3.5 hover:bg-[#f8fafc] transition-colors"
+                >
+                  <span className="text-sm font-semibold text-[#1e293b]">Status</span>
+                  <ChevronDown className={`w-4 h-4 text-[#64748B] transition-transform ${statusSectionOpen ? '' : '-rotate-90'}`} />
+                </button>
+                {statusSectionOpen && (
+                  <div className="px-6 py-2 space-y-1">
+                    {STATUS_OPTIONS.map(({ value, label }) => (
+                      <label key={value} className="flex items-center gap-2.5 px-1 py-2 cursor-pointer group">
+                        <input
+                          type="radio"
+                          name="status"
+                          className="hidden"
+                          checked={statusFilter === value}
+                          onChange={() => setStatusFilter(value as StatusFilter)}
+                        />
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${statusFilter === value ? 'border-[#116dff]' : 'border-[#cbd5e1]'}`}>
+                          {statusFilter === value && <span className="w-2 h-2 rounded-full bg-[#116dff]" />}
+                        </span>
+                        <span className={`text-[13px] ${statusFilter === value ? 'text-[#116dff] font-semibold' : 'text-[#334155]'}`}>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Priority Section */}
+              <div className="border-t border-[#e2e8f0]">
+                <button
+                  onClick={() => setPrioritySectionOpen(!prioritySectionOpen)}
+                  className="w-full px-6 flex items-center justify-between py-3.5 hover:bg-[#f8fafc] transition-colors"
+                >
+                  <span className="text-sm font-semibold text-[#1e293b]">Priority</span>
+                  <ChevronDown className={`w-4 h-4 text-[#64748B] transition-transform ${prioritySectionOpen ? '' : '-rotate-90'}`} />
+                </button>
+                {prioritySectionOpen && (
+                  <div className="px-6 py-2 space-y-1">
+                    {PRIORITIES.map((pr) => (
+                      <label key={pr} className="flex items-center gap-2.5 px-1 py-2 cursor-pointer group">
+                        <input
+                          type="radio"
+                          name="priority"
+                          className="hidden"
+                          checked={priorityFilter === pr}
+                          onChange={() => setPriorityFilter(pr)}
+                        />
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${priorityFilter === pr ? 'border-[#116dff]' : 'border-[#cbd5e1]'}`}>
+                          {priorityFilter === pr && <span className="w-2 h-2 rounded-full bg-[#116dff]" />}
+                        </span>
+                        <span className={`text-[13px] ${priorityFilter === pr ? 'text-[#116dff] font-semibold' : 'text-[#334155]'}`}>
+                          {pr === 'All' ? 'All Priorities' : pr.charAt(0) + pr.slice(1).toLowerCase()}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Date Filter Section */}
+              <div className="border-t border-[#e2e8f0]">
+                <button
+                  onClick={() => setDateSectionOpen(!dateSectionOpen)}
+                  className="w-full px-6 flex items-center justify-between py-3.5 hover:bg-[#f8fafc] transition-colors"
+                >
+                  <span className="text-sm font-semibold text-[#1e293b]">Date Range</span>
+                  <ChevronDown className={`w-4 h-4 text-[#64748B] transition-transform ${dateSectionOpen ? '' : '-rotate-90'}`} />
+                </button>
+                {dateSectionOpen && (
+                  <div className="px-6 py-2 space-y-1">
+                    {DATE_PRESETS.map((preset) => (
+                      <label key={preset} className="flex items-center gap-2.5 px-1 py-2 cursor-pointer group">
+                        <input
+                          type="radio"
+                          name="datePreset"
+                          className="hidden"
+                          checked={datePreset === preset}
+                          onChange={() => setDatePreset(preset)}
+                        />
+                        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${datePreset === preset ? 'border-[#116dff]' : 'border-[#cbd5e1]'}`}>
+                          {datePreset === preset && <span className="w-2 h-2 rounded-full bg-[#116dff]" />}
+                        </span>
+                        <span className={`text-[13px] ${datePreset === preset ? 'text-[#116dff] font-semibold' : 'text-[#334155]'}`}>{preset}</span>
+                      </label>
+                    ))}
+
+                    {datePreset === 'Custom Range' && (
+                      <div className="pt-2 pb-3 space-y-2">
+                        <div>
+                          <label className="text-[11px] font-medium text-[#64748B] block mb-1">From Date</label>
+                          <input
+                            type="date"
+                            value={customStartDate}
+                            onChange={(e) => setCustomStartDate(e.target.value)}
+                            className="w-full h-8 border border-[#e2e8f0] rounded-lg px-2.5 text-xs text-[#1e293b]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-medium text-[#64748B] block mb-1">To Date</label>
+                          <input
+                            type="date"
+                            value={customEndDate}
+                            onChange={(e) => setCustomEndDate(e.target.value)}
+                            className="w-full h-8 border border-[#e2e8f0] rounded-lg px-2.5 text-xs text-[#1e293b]"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4 border-t border-[#e2e8f0]">
+              <span className="text-[13px] font-medium text-[#64748B]">
+                {hasFilters ? `${activeFilterCount} filter(s) applied` : 'No filters applied'}
+              </span>
+              <button
+                onClick={clearAllFilters}
+                disabled={!hasFilters}
+                className={`text-[13px] font-semibold ${hasFilters ? 'text-[#116dff] hover:underline cursor-pointer' : 'text-[#94a3b8] cursor-not-allowed'}`}
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customize Columns Drawer */}
+      {isCustomizationMounted && (
+        <div className="fixed inset-0 top-12 z-40 flex justify-end animate-in fade-in duration-200">
+          <div
+            className="absolute inset-0 bg-black/30 transition-opacity duration-200 ease-out"
+            style={{ opacity: isCustomizationVisible ? 1 : 0 }}
+            onClick={closeCustomization}
+          />
+
+          <div
+            className="relative w-full max-w-[400px] h-full bg-white shadow-2xl flex flex-col transition-transform duration-200 ease-out z-10"
+            style={{ transform: isCustomizationVisible ? 'translateX(0)' : 'translateX(100%)' }}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2e8f0]">
+              <h2 className="text-base font-semibold text-[#1e293b]">Customize columns</h2>
+              <button onClick={closeCustomization} className="p-1 text-[#64748B] hover:text-[#1e293b] hover:bg-[#f1f5f9] rounded-lg transition-colors cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <p className="text-xs text-[#64748B]">Select which columns to show, or drag them into a different order.</p>
+
+              <div className="relative my-2">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+                <input
+                  type="text"
+                  placeholder="Search columns..."
+                  value={colSearch}
+                  onChange={(e) => setColSearch(e.target.value)}
+                  className="w-full h-9 bg-white border border-[#e2e8f0] rounded-full pl-9 pr-4 text-xs text-[#1e293b] placeholder-[#94a3b8] focus:outline-none focus:border-[#116dff]"
+                />
+              </div>
+
+              <div className="divide-y divide-[#e2e8f0] border border-[#e2e8f0] rounded-xl overflow-hidden mt-4">
+                {columnOrder.map((colId, idx) => {
+                  const isMandatory = colId === 'ticketDetails';
+                  const isVisible = visibleColumns[colId as keyof typeof visibleColumns];
+                  let label = '';
+                  switch (colId) {
+                    case 'ticketDetails': label = 'Ticket Details'; break;
+                    case 'customer': label = 'Customer'; break;
+                    case 'assignee': label = 'Assignee'; break;
+                    case 'priority': label = 'Priority'; break;
+                    case 'status': label = 'Status'; break;
+                    case 'createdAt': label = 'Created At'; break;
+                  }
+
+                  if (colSearch && !label.toLowerCase().includes(colSearch.toLowerCase())) {
+                    return null;
+                  }
+
+                  return (
+                    <div
+                      key={colId}
+                      draggable
+                      onDragStart={() => handleDragStart(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDrop={() => handleDrop(idx)}
+                      className={`flex items-center justify-between p-3 bg-white hover:bg-gray-50 transition-colors cursor-grab active:cursor-grabbing select-none ${
+                        dragOverIndex === idx ? 'border-t-2 border-t-[#116dff]' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <GripVertical className="w-4 h-4 text-[#cbd5e1] shrink-0 cursor-grab" />
+                        <input
+                          type="checkbox"
+                          checked={isVisible}
+                          disabled={isMandatory}
+                          onChange={(e) => setVisibleColumns({ ...visibleColumns, [colId]: e.target.checked })}
+                          className="w-4 h-4 rounded text-[#116dff] accent-[#116dff] cursor-pointer disabled:cursor-not-allowed"
+                        />
+                        <span className="text-sm font-semibold text-[#1e293b]">{label}</span>
+                      </div>
+                      {isMandatory && (
+                        <span className="text-[10px] bg-[#e2e8f0] text-[#64748B] px-2 py-0.5 rounded font-medium">Mandatory</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[#e2e8f0] flex justify-end">
+              <button
+                onClick={handleApplyColumnPreferences}
+                className="px-6 h-10 bg-[#116dff] hover:bg-[#0d5fd9] text-white font-semibold rounded-full text-sm transition-colors cursor-pointer"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Table Section */}
       <div className="overflow-x-auto min-h-[360px]">
-        <table className="w-full text-left text-xs min-w-[850px]">
-          <thead>
-            <tr className="border-b border-[#1b2536] bg-[#0c111a]/60 text-[#64748B] uppercase tracking-wider font-semibold whitespace-nowrap">
-              <th className="py-3.5 px-5 min-w-[220px]">Ticket Details</th>
-              <th className="py-3.5 px-5 min-w-[150px]">Customer</th>
-              <th className="py-3.5 px-5 min-w-[140px]">Assignee</th>
-              <th className="py-3.5 px-5 min-w-[100px]">Priority</th>
-              <th className="py-3.5 px-5 min-w-[110px]">Status</th>
-              <th className="py-3.5 px-5 min-w-[120px]">Created At</th>
-              <th className="py-3.5 px-5 text-right min-w-[110px]">Actions</th>
+        <table className="w-full text-left text-xs min-w-[850px] border-collapse">
+          <thead className="bg-[#f8fafc]">
+            <tr className="border-b border-[#e2e8f0] bg-[#f8fafc] text-[#64748b] uppercase tracking-wider font-semibold whitespace-nowrap">
+              {columnOrder.map((colId) => {
+                if (colId === 'ticketDetails' && visibleColumns.ticketDetails) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[220px]">Ticket Details</th>;
+                }
+                if (colId === 'customer' && visibleColumns.customer) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[150px]">Customer</th>;
+                }
+                if (colId === 'assignee' && visibleColumns.assignee) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[140px]">Assignee</th>;
+                }
+                if (colId === 'priority' && visibleColumns.priority) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[100px]">Priority</th>;
+                }
+                if (colId === 'warranty' && (visibleColumns as any).warranty) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[110px]">Warranty</th>;
+                }
+                if (colId === 'status' && visibleColumns.status) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[110px]">Status</th>;
+                }
+                if (colId === 'createdAt' && visibleColumns.createdAt) {
+                  return <th key={colId} className="bg-[#f8fafc] py-3.5 px-5 min-w-[120px]">Created At</th>;
+                }
+                return null;
+              })}
+              <th className="bg-[#f8fafc] py-3.5 px-5 text-right min-w-[110px]">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#1b2536]/80 text-[#CBD5E1]">
+          <tbody className="divide-y divide-[#e2e8f0] text-[#334155]">
             {isLoading ? (
               <>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <TableRowSkeleton key={i} cols={7} />
+                  <TableRowSkeleton key={i} cols={activeColCount} />
                 ))}
               </>
-            ) : filteredTickets.length === 0 ? (
+            ) : tickets.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-16 text-center">
-                  <div className="flex flex-col items-center justify-center space-y-3">
-                    <div className="w-16 h-16 bg-[#162030] rounded-full flex items-center justify-center border border-[#22314a] shadow-inner">
-                      <TicketIcon className="w-8 h-8 text-[#D99B26]" />
-                    </div>
-                    <div className="text-sm font-medium text-[#E2E8F0]">
-                      No tickets found
-                    </div>
-                    <div className="text-xs text-[#64748B] max-w-[250px]">
-                      We couldn't find any tickets matching your search or filter criteria.
-                    </div>
+                <td colSpan={activeColCount} className="py-12 text-center">
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    {statusFilter === 'READY_FOR_PICKUP' || window.location.pathname.includes('ready-for-pickup') ? (
+                      <>
+                        <img
+                          src="/empty-ready-pickup.png"
+                          alt="No items ready for pickup"
+                          className="w-64 max-w-full h-auto object-contain opacity-90"
+                        />
+                        <div className="text-sm font-bold text-[#1e293b] tracking-tight">No items ready for pickup</div>
+                        <div className="text-xs text-[#64748B] max-w-[280px]">
+                          There are currently no repair tickets waiting for customer pickup.
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <img
+                          src="/empty-tickets.png"
+                          alt="No tickets found"
+                          className="w-64 max-w-full h-auto object-contain opacity-90"
+                        />
+                        <div className="text-sm font-bold text-[#1e293b] tracking-tight">No tickets found</div>
+                        <div className="text-xs text-[#64748B] max-w-[280px]">
+                          We couldn't find any tickets matching your search or filter criteria.
+                        </div>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
             ) : (
-              filteredTickets.map((ticket) => (
+              tickets.map((ticket) => (
                 <tr
                   key={ticket.id}
-                  className="hover:bg-[#151d2d]/80 transition-colors group whitespace-nowrap"
+                  onClick={() => onSelectTicket(ticket)}
+                  className="border-b border-[#e2e8f0] last:border-0 hover:bg-[#f8fafc] transition-colors group whitespace-nowrap cursor-pointer"
                 >
-                  {/* Ticket Details */}
-                  <td className="py-3.5 px-5 font-semibold text-white">
-                    <div className="flex flex-col min-w-0">
-                      <span className="truncate max-w-[200px] text-white text-xs font-semibold" title={ticket.title}>
-                        {ticket.title}
-                      </span>
-                      <span className="text-[10px] text-[#64748B] font-normal truncate max-w-[200px] mt-0.5">
-                        {ticket.description}
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Customer */}
-                  <td className="py-3.5 px-5 text-[#E2E8F0] font-medium">
-                    <div className="flex flex-col">
-                      <span className="truncate max-w-[140px]" title={ticket.customer?.name || 'Walk-in'}>
-                        {ticket.customer?.name || 'Walk-in Customer'}
-                      </span>
-                      {ticket.customer?.phone && (
-                        <span className="text-[10px] text-[#64748B] font-normal font-mono mt-0.5">
-                          {ticket.customer.phone}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-
-                  {/* Assignee */}
-                  <td className="py-3.5 px-5 text-[#94A3B8] font-normal">
-                    <div className="flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-[#64748B]" />
-                      <span className="truncate max-w-[120px]" title={ticket.assignedTo?.name || 'Unassigned'}>
-                        {ticket.assignedTo?.name || 'Unassigned'}
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Priority */}
-                  <td className="py-3.5 px-5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityColor(ticket.priority)}`}>
-                      {ticket.priority}
-                    </span>
-                  </td>
-
-                  {/* Status Pill */}
-                  <td className="py-3.5 px-5">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${getStatusBadge(ticket.status)}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
-                      {getStatusLabel(ticket.status)}
-                    </span>
-                  </td>
-
-                  {/* Created At */}
-                  <td className="py-3.5 px-5 text-[#94A3B8] font-mono text-[11px]">
-                    {new Date(ticket.createdAt).toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </td>
+                  {columnOrder.map((colId) => {
+                    if (colId === 'ticketDetails' && visibleColumns.ticketDetails) {
+                      return (
+                        <td key={colId} className="py-4 px-5 text-[#1e293b]">
+                          <div className="flex flex-col min-w-0">
+                            <span className="truncate max-w-[200px] text-[#1e293b] text-sm font-semibold" title={ticket.title}>
+                              {ticket.title}
+                            </span>
+                            <span className="text-xs text-[#64748B] font-normal truncate max-w-[200px] mt-0.5">
+                              {ticket.ticketNumber || ticket.jobNumber || ticket.description}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    }
+                    if (colId === 'customer' && visibleColumns.customer) {
+                      return (
+                        <td key={colId} className="py-4 px-5 text-[#334155]">
+                          <div className="flex flex-col">
+                            <span className="truncate max-w-[140px] text-sm font-semibold text-[#1e293b]" title={ticket.customer?.name || 'Walk-in'}>
+                              {ticket.customer?.name || 'Walk-in Customer'}
+                            </span>
+                            {ticket.customer?.phone && (
+                              <span className="text-xs text-[#64748B] font-normal font-mono mt-0.5">
+                                {ticket.customer.phone}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    }
+                    if (colId === 'assignee' && visibleColumns.assignee) {
+                      return (
+                        <td key={colId} className="py-4 px-5 text-[#334155] font-medium text-sm">
+                          <span className="truncate max-w-[120px] block" title={ticket.assignedTo?.name || 'Unassigned'}>
+                            {ticket.assignedTo?.name || 'Unassigned'}
+                          </span>
+                        </td>
+                      );
+                    }
+                    if (colId === 'priority' && visibleColumns.priority) {
+                      return (
+                        <td key={colId} className="py-4 px-5">
+                          <span className={getPriorityTextStyle(ticket.priority)}>
+                            {ticket.priority}
+                          </span>
+                        </td>
+                      );
+                    }
+                    if (colId === 'warranty' && (visibleColumns as any).warranty) {
+                      const w = getWarrantyDisplay(ticket.warrantyStatus);
+                      return (
+                        <td key={colId} className="py-4 px-5">
+                          {w.isactive ? (
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${w.badgeClass}`}>
+                              {w.label}
+                            </span>
+                          ) : (
+                            <span className="text-[#94a3b8] font-mono text-xs">{w.label}</span>
+                          )}
+                        </td>
+                      );
+                    }
+                    if (colId === 'status' && visibleColumns.status) {
+                      return (
+                        <td key={colId} className="py-4 px-5">
+                          <StatusBadge status={ticket.status} />
+                        </td>
+                      );
+                    }
+                    if (colId === 'createdAt' && visibleColumns.createdAt) {
+                      return (
+                        <td key={colId} className="py-4 px-5 text-[#475569] font-mono text-xs font-medium">
+                          {new Date(ticket.createdAt).toLocaleDateString(undefined, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </td>
+                      );
+                    }
+                    return null;
+                  })}
 
                   {/* Actions */}
-                  <td className="py-3.5 px-5 text-right relative">
+                  <td className="py-4 px-5 text-right relative">
                     <div className="flex items-center justify-end gap-1.5">
-                      {/* View Details Eye Icon */}
-                      <button
-                        onClick={() => onSelectTicket(ticket)}
-                        className="p-1.5 text-[#94A3B8] hover:text-white hover:bg-[#1e2a40] rounded-lg transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-
-                      {/* More Menu Toggle */}
                       <div className="relative">
                         <button
-                          onClick={() =>
-                            setActiveActionMenuId(
-                              activeActionMenuId === ticket.id ? null : ticket.id
-                            )
-                          }
-                          className="p-1.5 text-[#94A3B8] hover:text-white hover:bg-[#1e2a40] rounded-lg transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveActionMenuId(activeActionMenuId === ticket.id ? null : ticket.id);
+                          }}
+                          className="w-8 h-8 flex items-center justify-center border border-[#e2e8f0] hover:border-[#116dff] text-[#116dff] hover:bg-[#116dff]/5 rounded-full transition-colors"
                           title="More Actions"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
 
-                        {/* Dropdown Menu */}
                         {activeActionMenuId === ticket.id && (
                           <div
-                            className="absolute right-0 mt-1 w-40 bg-[#121824] border border-[#23314a] rounded-lg shadow-2xl z-50 p-1.5 text-left animate-in fade-in zoom-in-95"
+                            className="absolute right-0 mt-1 w-40 bg-white border border-[#e2e8f0] rounded-lg shadow-2xl z-50 p-1.5 text-left animate-in fade-in zoom-in-95"
                             onMouseLeave={() => setActiveActionMenuId(null)}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 onSelectTicket(ticket);
                                 setActiveActionMenuId(null);
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#94A3B8] hover:text-white hover:bg-[#1c263a] rounded-md transition-colors"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#475569] hover:text-[#1e293b] hover:bg-[#f1f5f9] rounded-md transition-colors"
                             >
                               <Eye className="w-3.5 h-3.5" />
                               View Details
                             </button>
+
                             {onEditTicket && (
                               <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   onEditTicket(ticket);
                                   setActiveActionMenuId(null);
                                 }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#94A3B8] hover:text-white hover:bg-[#1c263a] rounded-md transition-colors"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#475569] hover:text-[#1e293b] hover:bg-[#f1f5f9] rounded-md transition-colors"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                                 Edit Ticket
                               </button>
                             )}
+
                             {onDeleteTicket && (
                               <>
-                                <div className="my-1 border-t border-[#23314a]" />
+                                <div className="my-1 border-t border-[#e2e8f0]" />
                                 <button
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     onDeleteTicket(ticket);
                                     setActiveActionMenuId(null);
                                   }}
@@ -420,20 +870,21 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
         </table>
       </div>
 
-      {/* Footer Info */}
-      <div className="p-4 border-t border-[#1b2536] flex items-center justify-between text-xs text-[#64748B]">
-        <div>
-          Showing{' '}
-          <span className="font-semibold text-white">
-            {filteredTickets.length}
-          </span>{' '}
-          of{' '}
-          <span className="font-semibold text-white">
-            {baseTickets.length}
-          </span>{' '}
-          tickets
+      {/* Infinite Scroll Sentinel & Loading / Completion Footer */}
+      <div ref={loadMoreRef} className="h-4" />
+
+      {isFetchingNextPage && (
+        <div className="py-4 text-center border-t border-[#e2e8f0] bg-[#f8fafc] flex items-center justify-center gap-2 text-xs font-semibold text-[#116dff]">
+          <Loader2 className="w-4 h-4 animate-spin text-[#116dff]" />
+          <span>Loading more tickets...</span>
         </div>
-      </div>
+      )}
+
+      {!hasNextPage && tickets.length > 0 && (
+        <div className="py-3 text-center border-t border-[#e2e8f0] bg-[#f8fafc] text-[11px] font-medium text-[#94a3b8]">
+          All tickets loaded ({tickets.length} of {totalCount})
+        </div>
+      )}
     </div>
   );
 };

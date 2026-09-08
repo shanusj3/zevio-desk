@@ -23,7 +23,27 @@ export interface Tenant {
   monthlyRevenue?: string;
 }
 
-export type ActiveTab = 'dashboard' | 'tenants' | 'reports' | 'tickets' | 'customers' | 'staff' | 'settings' | 'profile' | 'invoices' | 'billing' | 'sales';
+export type ActiveTab =
+  | 'dashboard'
+  | 'tenants'
+  | 'reports'
+  | 'tickets'
+  | 'customers'
+  | 'staff'
+  | 'settings'
+  | 'profile'
+  | 'invoices'
+  | 'billing'
+  | 'sales'
+  | 'inventory'
+  | 'catalog-products'
+  | 'catalog-inventory'
+  | 'catalog-categories'
+  | 'whatsapp'
+  | 'reports-highlights'
+  | 'reports-repairs'
+  | 'reports-financials'
+  | 'reports-inventory';
 
 export type InvoiceSourceType = 'ticket' | 'sale' | 'custom';
 

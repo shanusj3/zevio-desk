@@ -8,16 +8,16 @@ interface SkeletonProps {
 
 export const Skeleton: React.FC<SkeletonProps> = ({ className = '', style }) => (
   <div
-    className={`relative overflow-hidden rounded-md bg-[#1b2536] ${className}`}
+    className={`relative overflow-hidden rounded-md bg-[#e2e8f0] ${className}`}
     style={style}
   >
-    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.6s_infinite] bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
+    <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.6s_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
   </div>
 );
 
 // ─── Stat Card Skeleton (matches StatCard layout exactly) ─────────────────────
 export const StatCardSkeleton: React.FC = () => (
-  <div className="relative overflow-hidden rounded-lg p-4 border border-[#1b2536] bg-[#101622] shadow-sm">
+  <div className="relative overflow-hidden rounded-xl p-4 border border-[#dfe5eb] bg-white shadow-xs">
     <div className="flex items-center gap-3.5">
       <Skeleton className="w-10 h-10 rounded-lg shrink-0" />
       <div className="flex-1 space-y-2">
@@ -35,7 +35,7 @@ interface TableRowSkeletonProps {
 }
 
 export const TableRowSkeleton: React.FC<TableRowSkeletonProps> = ({ cols = 7 }) => (
-  <tr className="border-b border-[#1b2536]/80">
+  <tr className="border-b border-[#e2e8f0]">
     {Array.from({ length: cols }).map((_, i) => (
       <td key={i} className="py-3.5 px-5">
         {i === 0 ? (
@@ -64,7 +64,7 @@ export const TableRowSkeleton: React.FC<TableRowSkeletonProps> = ({ cols = 7 }) 
 
 // ─── Reports Metric Card Skeleton ─────────────────────────────────────────────
 export const ReportCardSkeleton: React.FC = () => (
-  <div className="bg-[#101622] border border-[#1b2536] p-5 rounded-2xl shadow-lg space-y-3">
+  <div className="bg-white border border-[#dfe5eb] p-5 rounded-2xl shadow-xs space-y-3">
     <div className="flex items-center justify-between">
       <Skeleton className="h-3 w-32" />
       <Skeleton className="w-4 h-4 rounded" />
@@ -76,7 +76,7 @@ export const ReportCardSkeleton: React.FC = () => (
 
 // ─── Reports Bar Chart Skeleton ───────────────────────────────────────────────
 export const ReportChartSkeleton: React.FC = () => (
-  <div className="lg:col-span-2 bg-[#101622] border border-[#1b2536] p-6 rounded-2xl shadow-xl space-y-4">
+  <div className="lg:col-span-2 bg-white border border-[#dfe5eb] p-6 rounded-2xl shadow-xs space-y-4">
     <div className="flex items-center justify-between">
       <div className="space-y-2">
         <Skeleton className="h-4 w-40" />
@@ -84,7 +84,7 @@ export const ReportChartSkeleton: React.FC = () => (
       </div>
       <Skeleton className="w-5 h-5 rounded" />
     </div>
-    <div className="h-48 flex items-end justify-between gap-3 pt-6 border-b border-[#1b2536]">
+    <div className="h-48 flex items-end justify-between gap-3 pt-6 border-b border-[#dfe5eb]">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="flex-1 flex flex-col items-center gap-2">
           <Skeleton
@@ -100,7 +100,7 @@ export const ReportChartSkeleton: React.FC = () => (
 
 // ─── Reports Pie Card Skeleton ────────────────────────────────────────────────
 export const ReportPieSkeleton: React.FC = () => (
-  <div className="bg-[#101622] border border-[#1b2536] p-6 rounded-2xl shadow-xl space-y-4">
+  <div className="bg-white border border-[#dfe5eb] p-6 rounded-2xl shadow-xs space-y-4">
     <div className="flex items-center justify-between">
       <Skeleton className="h-4 w-32" />
       <Skeleton className="w-5 h-5 rounded" />
@@ -114,3 +114,21 @@ export const ReportPieSkeleton: React.FC = () => (
     </div>
   </div>
 );
+
+// ─── Full Page Reports Skeleton ──────────────────────────────────────────────
+export const ReportsSkeleton: React.FC = () => (
+  <div className="space-y-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <ReportCardSkeleton />
+      <ReportCardSkeleton />
+      <ReportCardSkeleton />
+      <ReportCardSkeleton />
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <ReportChartSkeleton />
+      <ReportPieSkeleton />
+    </div>
+  </div>
+);
+
+

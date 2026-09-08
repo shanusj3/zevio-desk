@@ -31,15 +31,16 @@ export const TicketStatusStepper: React.FC<TicketStatusStepperProps> = ({ ticket
     { key: 'DIAGNOSING', label: 'Diagnosing' },
     ...(hasParts ? [{ key: 'WAITING_FOR_PARTS', label: 'Waiting for parts' }] : []),
     { key: 'IN_PROGRESS', label: 'In progress' },
+    { key: 'REPAIR_COMPLETED', label: 'Repair completed' },
     { key: 'READY_FOR_PICKUP', label: 'Ready for pickup' },
+    { key: 'DELIVERED', label: 'Delivered' },
   ];
 
   const currentIndex = baseSteps.findIndex(s => s.key === ticket.status);
-  const isCompleted = ticket.status === 'COMPLETED';
+  const isCompleted = ticket.status === 'DELIVERED' || ticket.status === 'COMPLETED';
   
-  // Fallback for an unknown state that isn't complete or cancelled
   const effectiveIndex = isCompleted ? baseSteps.length - 1 : (currentIndex > -1 ? currentIndex : -1);
-  const currentStepLabel = isCompleted ? 'Completed' : (currentIndex > -1 ? baseSteps[currentIndex].label : 'Unknown Status');
+  const currentStepLabel = isCompleted ? 'Delivered' : (currentIndex > -1 ? baseSteps[currentIndex].label : 'Unknown Status');
 
   return (
     <div className="w-full py-4 mb-2 space-y-2.5">

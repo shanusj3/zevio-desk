@@ -100,10 +100,27 @@ export function calculateLineItem(input: LineItemInput): CalculatedLineItem {
 
   // Warranty snapshot
   const warrantyEnabled   = input.warrantyEnabled ?? false;
-  const warrantyStartDate = warrantyEnabled && input.warrantyStartDate
-    ? new Date(input.warrantyStartDate) : null;
-  const warrantyEndDate   = warrantyEnabled && input.warrantyEndDate
-    ? new Date(input.warrantyEndDate) : null;
+  let warrantyStartDate: Date | null = null;
+  let warrantyEndDate: Date | null = null;
+
+  if (warrantyEnabled) {
+    warrantyStartDate = input.warrantyStartDate ? new Date(input.warrantyStartDate) : new Date();
+    if (input.warrantyEndDate) {
+      warrantyEndDate = new Date(input.warrantyEndDate);
+    } else if (input.warrantyDuration && input.warrantyUnit) {
+      const end = new Date(warrantyStartDate);
+      const unit = String(input.warrantyUnit).toUpperCase();
+      const dur = Math.max(1, Number(input.warrantyDuration) || 1);
+      if (unit.includes('DAY')) {
+        end.setDate(end.getDate() + dur);
+      } else if (unit.includes('MONTH')) {
+        end.setMonth(end.getMonth() + dur);
+      } else if (unit.includes('YEAR')) {
+        end.setFullYear(end.getFullYear() + dur);
+      }
+      warrantyEndDate = end;
+    }
+  }
 
   return {
     type:             input.type,
@@ -152,18 +169,18 @@ export function calculateInvoiceTotals(
   return { subtotal, discount: totalDiscount, taxableAmount, tax: totalTax, total, amountPaid, balanceDue };
 }
 
-// ─── Guard: Reject modifications when invoice is FINALIZED or ticket is COMPLETED ────
+// ─── Guard: Reject modifications when invoice is FINALIZED/ISSUED/PAID or ticket is DELIVERED/COMPLETED ────
 export async function assertInvoiceNotFinalized(ticketId: string): Promise<void> {
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-  if (ticket && (ticket.status === "COMPLETED" || ticket.status === "CANCELLED")) {
+  if (ticket && (ticket.status === "COMPLETED" || ticket.status === "DELIVERED" || ticket.status === "CANCELLED")) {
     throw new ValidationError(
-      "This ticket is completed and locked. Modifying parts or billing information is not allowed."
+      "This ticket is completed/delivered and locked. Modifying parts, adding charge lines, or editing billing information is not allowed."
     );
   }
   const invoice = await prisma.invoice.findUnique({ where: { ticketId } });
-  if (invoice && invoice.status === "FINALIZED") {
+  if (invoice && (invoice.status === "FINALIZED" || invoice.status === "ISSUED" || invoice.status === "PAID")) {
     throw new ValidationError(
-      "This invoice has been finalized and cannot be modified. Create a new correction or refund transaction instead."
+      "This invoice has been issued/finalized and cannot be modified. Only comments and activity logs are permitted."
     );
   }
 }

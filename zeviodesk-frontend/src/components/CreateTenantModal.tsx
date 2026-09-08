@@ -106,34 +106,31 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // 1. Show local preview
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result as string);
+      reader.onloadend = async () => {
+        const dataUrl = reader.result as string;
+        setLogoPreview(dataUrl);
+        setFormData((prev) => ({ ...prev, logoUrl: dataUrl }));
+
+        try {
+          setIsUploadingLogo(true);
+          const tenantId = initialData?.id || formData.id || crypto.randomUUID();
+          if (!initialData && !formData.id) {
+            setFormData((prev) => ({ ...prev, id: tenantId }));
+          }
+
+          const presigned = await tenantsApi.getPresignedUrl(tenantId, file.type);
+          await tenantsApi.uploadToS3(presigned.url, presigned.fields, file);
+          if (presigned.fileUrl) {
+            setFormData((prev) => ({ ...prev, logoUrl: presigned.fileUrl }));
+          }
+        } catch (err) {
+          console.warn('S3 upload not available, using base64 image data:', err);
+        } finally {
+          setIsUploadingLogo(false);
+        }
       };
       reader.readAsDataURL(file);
-
-      // 2. Upload to S3 via presigned URL
-      try {
-        setIsUploadingLogo(true);
-        
-        // If it's a new tenant, generate a UUID for it and store it in formData
-        const tenantId = initialData?.id || formData.id || crypto.randomUUID();
-        
-        if (!initialData && !formData.id) {
-          setFormData((prev) => ({ ...prev, id: tenantId }));
-        }
-
-        const presigned = await tenantsApi.getPresignedUrl(tenantId, file.type);
-        await tenantsApi.uploadToS3(presigned.url, presigned.fields, file);
-        
-        setFormData((prev) => ({ ...prev, logoUrl: presigned.fileUrl }));
-      } catch (err) {
-        console.error('Failed to upload logo', err);
-        setErrors((prev) => ({ ...prev, logoUrl: 'Failed to upload logo' }));
-      } finally {
-        setIsUploadingLogo(false);
-      }
     }
   };
 

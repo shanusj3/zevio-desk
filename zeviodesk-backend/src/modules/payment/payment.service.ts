@@ -98,14 +98,46 @@ export const paymentService = {
       throw new NotFoundError("Ticket not found");
     }
 
-    if (ticket.status === "COMPLETED" || ticket.status === "CANCELLED") {
-      throw new ValidationError("This ticket is completed and locked. Recording payments is not allowed.");
+    if (ticket.status === "COMPLETED" || ticket.status === "DELIVERED" || ticket.status === "CANCELLED") {
+      throw new ValidationError("This ticket is completed/delivered and locked. Recording payments is not allowed.");
     }
 
     return prisma.$transaction(async (tx) => {
       const dbInvoice = await tx.invoice.findUnique({ where: { ticketId } });
-      if (dbInvoice && dbInvoice.status === "VOID") {
-        throw new ValidationError("Cannot record payments against a voided invoice");
+      if (dbInvoice && (dbInvoice.status === "VOID" || dbInvoice.status === "PAID")) {
+        throw new ValidationError("Cannot record payments against a voided or fully paid invoice.");
+      }
+
+      // Recompute exact bill totals & balance due server-side
+      const ticketWithLines = await tx.ticket.findUnique({
+        where: { id: ticketId },
+        include: { lineItems: true },
+      });
+
+      let totalBill = new Decimal(0);
+      if (dbInvoice) {
+        totalBill = new Decimal(dbInvoice.total.toString());
+      } else if (ticketWithLines && ticketWithLines.lineItems.length > 0) {
+        let sub = new Decimal(0);
+        let tax = new Decimal(0);
+        for (const li of ticketWithLines.lineItems) {
+          sub = sub.add(new Decimal(li.subtotal.toString()));
+          tax = tax.add(new Decimal(li.taxAmount.toString()));
+        }
+        totalBill = sub.add(tax);
+      } else {
+        totalBill = new Decimal((ticket.totalAmount ?? 0).toString());
+      }
+
+      const existingPayments = await tx.payment.findMany({ where: { ticketId } });
+      const currentPaid = computeNetPaid(existingPayments);
+      const currentBalanceDue = Decimal.max(0, totalBill.sub(currentPaid));
+
+      // Server-side validation: payment amount cannot exceed remaining balance due
+      if (totalBill.gt(0) && new Decimal(dto.amount).gt(currentBalanceDue.add(0.01))) {
+        throw new ValidationError(
+          `Payment amount (₹${dto.amount}) exceeds current invoice balance due (₹${currentBalanceDue.toFixed(2)}).`
+        );
       }
 
       const payment = await tx.payment.create({
@@ -125,27 +157,6 @@ export const paymentService = {
 
       const allPayments = await tx.payment.findMany({ where: { ticketId } });
       const amountPaid = computeNetPaid(allPayments);
-
-      let totalBill = new Decimal(0);
-      if (dbInvoice) {
-        totalBill = new Decimal(dbInvoice.total.toString());
-      } else {
-        const ticketWithLines = await tx.ticket.findUnique({
-          where: { id: ticketId },
-          include: { lineItems: true },
-        });
-        if (ticketWithLines && ticketWithLines.lineItems.length > 0) {
-          let sub = new Decimal(0);
-          let tax = new Decimal(0);
-          for (const li of ticketWithLines.lineItems) {
-            sub = sub.add(new Decimal(li.subtotal.toString()));
-            tax = tax.add(new Decimal(li.taxAmount.toString()));
-          }
-          totalBill = sub.add(tax);
-        } else {
-          totalBill = new Decimal((ticket.totalAmount ?? 0).toString());
-        }
-      }
 
       const balanceDue = Decimal.max(0, totalBill.sub(amountPaid));
       const paymentStatus = balanceDue.lte(0) ? "PAID"

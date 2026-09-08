@@ -15,6 +15,7 @@ export const InvoiceTemplateSettings: React.FC = () => {
   const [gstNumber, setGstNumber] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [termsNotes, setTermsNotes] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#116dff');
 
   useEffect(() => {
     if (settings) {
@@ -34,6 +35,7 @@ export const InvoiceTemplateSettings: React.FC = () => {
       setGstNumber(settings.gstNumber || '');
       setLogoUrl(settings.logoUrl || '');
       setTermsNotes(settings.description || '');
+      setPrimaryColor(settings.primaryColor || '#116dff');
     }
   }, [settings]);
 
@@ -85,6 +87,7 @@ export const InvoiceTemplateSettings: React.FC = () => {
         gstNumber: gstNumber.trim() || null,
         logoUrl: logoUrl.trim() || null,
         description: termsNotes.trim() || null,
+        primaryColor: primaryColor || '#116dff',
       });
       showToast('Invoice template settings saved successfully!', 'success');
     } catch (err: any) {
@@ -283,6 +286,62 @@ export const InvoiceTemplateSettings: React.FC = () => {
                 placeholder="29AAAAA0000A1Z5"
                 className="w-full h-[50px] px-4 rounded-xl bg-[#182030] border border-[#1f293d] text-sm text-white font-mono focus:border-[#D99B26] outline-none"
               />
+            </div>
+
+            {/* Brand Primary Color */}
+            <div>
+              <label className="block text-xs font-semibold text-[#9CA3AF] mb-1 uppercase tracking-wide">
+                Brand Primary Color
+              </label>
+              <p className="text-[11px] text-[#6B7280] mb-2">
+                Used throughout your tenant dashboard — buttons, badges, and accents.
+              </p>
+              <div className="flex items-center gap-3">
+                {/* Native color picker swatch */}
+                <label className="relative shrink-0 cursor-pointer">
+                  <div
+                    className="w-10 h-10 rounded-xl border-2 border-[#2d3b54] shadow-md transition-transform hover:scale-105"
+                    style={{ backgroundColor: primaryColor }}
+                  />
+                  <input
+                    type="color"
+                    value={primaryColor}
+                    onChange={e => setPrimaryColor(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    title="Pick brand color"
+                  />
+                </label>
+
+                {/* Hex text input */}
+                <input
+                  type="text"
+                  value={primaryColor}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (/^#[0-9A-Fa-f]{0,6}$/.test(val)) setPrimaryColor(val);
+                  }}
+                  placeholder="#116dff"
+                  maxLength={7}
+                  className="flex-1 h-10 px-3 rounded-xl bg-[#182030] border border-[#1f293d] text-sm text-white font-mono focus:border-[#D99B26] outline-none"
+                />
+
+                {/* Preset swatches */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {['#116dff', '#7C3AED', '#06B6D4', '#10B981', '#F59E0B', '#EC4899', '#EF4444', '#6366F1'].map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setPrimaryColor(c)}
+                      title={c}
+                      className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-125 shrink-0"
+                      style={{
+                        backgroundColor: c,
+                        borderColor: primaryColor === c ? '#fff' : 'transparent',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div>

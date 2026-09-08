@@ -19,8 +19,10 @@ router.get("/",
   requireRole(STAFF_WITH_TECHNICIAN),
   ticketController.getAll
 );
-// Must be defined before /:id so `ready-for-pickup` is never treated as an ID.
+// Must be defined before /:id so static string paths are never treated as dynamic IDs.
+router.get("/repair-completed", requireRole(STAFF_NO_TECHNICIAN), ticketController.repairCompleted);
 router.get("/ready-for-pickup", requireRole(STAFF_NO_TECHNICIAN), ticketController.readyForPickup);
+router.post("/:id/complete-repair", requireRole(STAFF_WITH_TECHNICIAN), ticketController.completeRepair);
 router.post("/:id/deliver", requireRole(STAFF_NO_TECHNICIAN), ticketController.deliver);
 router.get("/:id",
   requireRole(STAFF_WITH_TECHNICIAN),

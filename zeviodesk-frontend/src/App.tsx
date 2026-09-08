@@ -8,8 +8,8 @@ import { TenantDetailsDrawer } from './components/TenantDetailsDrawer';
 import { CreateTenantModal } from './components/CreateTenantModal';
 import { ImportModal } from './components/ImportModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { ReportsView } from './components/ReportsView';
-import { LoginPage } from './components/LoginPage';
+import { ReportsView } from './pages/ReportsView';
+import { LoginPage } from './pages/LoginPage';
 import { Tenant, ActiveTab } from './types';
 import { CheckCircle2, AlertCircle, X, Loader2 } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
@@ -21,12 +21,14 @@ import {
 } from './hooks/useTenantsQuery';
 import { useReportsQuery } from './hooks/useReportsQuery';
 import { StatCardSkeleton } from './components/Skeleton';
-import { SetupPasswordPage } from './components/SetupPasswordPage';
-import { TenantAdminDashboard } from './components/TenantAdminDashboard';
-import { CreateTicketPage } from './components/CreateTicketPage';
+import { SetupPasswordPage } from './pages/SetupPasswordPage';
+import { TenantAdminDashboard } from './pages/TenantAdminDashboard';
+import { AppRoutes } from './routes/AppRoutes';
+import { CreateTicketPage } from './pages/CreateTicketPage';
 import { navigate, parseTicketRoute } from './lib/navigation';
 import { authApi } from './lib/api';
-import { PublicTrackingPage } from './components/PublicTrackingPage';
+import { PublicTrackingPage } from './pages/PublicTrackingPage';
+import { PublicCustomerTrackingPage } from './pages/PublicCustomerTrackingPage';
 
 function AppContent() {
   const [pathname, setPathname] = useState(window.location.pathname);
@@ -60,14 +62,14 @@ function AppContent() {
     clearToast,
   } = useAppStore();
 
-  // TanStack React Query hooks for data caching & API calls
+
   const { data: reportsData, isLoading: reportsLoading } = useReportsQuery();
   const createMutation = useCreateTenantMutation();
   const updateMutation = useUpdateTenantMutation();
   const toggleStatusMutation = useToggleTenantStatusMutation();
   const deleteMutation = useDeleteTenantMutation();
 
-  // Handle window resize for mobile sidebar
+
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -78,7 +80,7 @@ function AppContent() {
     return () => window.removeEventListener('resize', handleResize);
   }, [setIsSidebarOpen]);
 
-  // Fetch current user if authenticated but not loaded yet
+ 
   useEffect(() => {
     if (isAuthenticated && !currentUser) {
       authApi.me()
@@ -98,14 +100,14 @@ function AppContent() {
 
   if (isInitializingAuth) {
     return (
-      <div className="min-h-screen bg-[#090e17] flex flex-col items-center justify-center text-white">
-        <Loader2 className="w-8 h-8 animate-spin text-[#D99B26] mb-4" />
-        <p className="text-[#9aa1b0]">Loading your profile...</p>
+      <div className="min-h-screen bg-[#f4f7fb] flex flex-col items-center justify-center text-[#1e293b]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#116dff] mb-3" />
+        <p className="text-xs font-semibold text-[#64748b]">Loading your profile...</p>
       </div>
     );
   }
 
-  // Handle Setup Password Route
+
   const isSetupPasswordRoute = pathname === '/setup-password';
   const urlParams = new URLSearchParams(window.location.search);
   const setupToken = urlParams.get('token');
@@ -116,39 +118,33 @@ function AppContent() {
     return <SetupPasswordPage token={setupToken} />;
   }
 
-  // Path-based customer portal: /:tenantSlug/track. It is intentionally
-  // available without an account or tenant data from the client.
-  const trackingMatch = pathname.match(/^\/([^/]+)\/track\/?$/);
-  if (trackingMatch) {
-    return <PublicTrackingPage tenantSlug={trackingMatch[1]} />;
+
+  const isTrackingRoute = pathname.includes('/track');
+  if (isTrackingRoute) {
+    return <PublicCustomerTrackingPage />;
   }
 
-  // If user is not authenticated, present Login Page (No Signup)
+
   if (!isAuthenticated) {
     return <LoginPage />;
   }
 
-  // Role-based routing
+
   if (currentUser?.role !== 'SUPER_ADMIN') {
-    // Detect if we're on a tenant subdomain (e.g., zevionlabs.localhost)
+ 
     const hostname = window.location.hostname;
     const hostParts = hostname.split('.');
-    const isOnSubdomain = hostParts.length >= 2 && hostParts[0] !== 'www';
+    const searchParams = new URLSearchParams(window.location.search);
+    const paramSlug = searchParams.get('tenant');
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isOnSubdomain = Boolean(paramSlug) || isLocalhost || (hostParts.length >= 2 && hostParts[0] !== 'www');
 
     const tenantRoles = ['TENANT_ADMIN', 'MANAGER', 'ADVISOR', 'TECHNICIAN'];
     if (isOnSubdomain && tenantRoles.includes(currentUser?.role as string)) {
-      const ticketRoute = parseTicketRoute(pathname);
-      if (ticketRoute?.view === 'new') {
-        return (
-          <CreateTicketPage
-            onBack={() => navigate('/tickets')}
-          />
-        );
-      }
-      return <TenantAdminDashboard />;
+      return <AppRoutes />;
     }
 
-    // Non-super-admin on the main portal
+
     return (
       <div className="min-h-screen bg-[#0c1017] flex items-center justify-center p-6">
         <div className="w-full max-w-md bg-[#101622] border border-[#1b2536] rounded-2xl shadow-2xl p-8 text-center space-y-4">
@@ -175,10 +171,10 @@ function AppContent() {
     );
   }
 
-  // Handlers using TanStack Query Mutations
+
   const handleCreateOrUpdateTenant = (tenantData: Partial<Tenant>) => {
     if (selectedTenantForEdit) {
-      // Edit existing tenant via Mutation
+     
       updateMutation.mutate(
         {
           ...selectedTenantForEdit,
@@ -199,7 +195,7 @@ function AppContent() {
         }
       );
     } else {
-      // Create new tenant via Mutation
+   
       createMutation.mutate(tenantData, {
         onSuccess: (newTenant) => {
           addNotification({
@@ -285,7 +281,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-[#0c1017] text-[#e2e8f0] flex flex-col md:flex-row antialiased selection:bg-[#D99B26]/30 overflow-x-hidden">
-      {/* Mobile Backdrop for Sidebar */}
+   
       {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-30 md:hidden"
@@ -293,7 +289,7 @@ function AppContent() {
         />
       )}
 
-      {/* Left Sidebar */}
+    
       <div
         className={`fixed top-0 left-0 h-screen z-40 transition-all duration-300 ease-in-out shrink-0 w-64 ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -302,7 +298,7 @@ function AppContent() {
         <Sidebar
           activeTab={superAdminTab}
           setActiveTab={(tab: ActiveTab) => {
-            const paths: Record<ActiveTab, string> = { dashboard: '/dashboard', tenants: '/tenants', reports: '/reports', tickets: '/dashboard', invoices: '/dashboard', billing: '/dashboard', sales: '/dashboard', customers: '/dashboard', staff: '/dashboard', settings: '/dashboard', profile: '/dashboard' };
+            const paths: Record<ActiveTab, string> = { dashboard: '/dashboard', tenants: '/tenants', reports: '/reports', tickets: '/dashboard', invoices: '/dashboard', billing: '/dashboard', sales: '/dashboard', customers: '/dashboard', staff: '/dashboard', settings: '/dashboard', profile: '/dashboard', inventory: '/dashboard', 'catalog-products': '/dashboard', 'catalog-inventory': '/dashboard', 'catalog-categories': '/dashboard', whatsapp: '/dashboard', 'reports-highlights': '/reports/highlights', 'reports-repairs': '/reports/repairs', 'reports-financials': '/reports/financials', 'reports-inventory': '/reports/inventory' };
             window.history.pushState({}, '', paths[tab]);
             window.dispatchEvent(new PopStateEvent('popstate'));
             if (window.innerWidth < 768) setIsSidebarOpen(false);

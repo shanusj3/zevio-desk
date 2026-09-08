@@ -129,3 +129,30 @@ export function billingOutstandingPath() {
 export function saleDetailPath(saleId: string) {
   return `/sales/${saleId}`;
 }
+
+export type CategoryRoute =
+  | { view: 'list' }
+  | { view: 'detail'; categoryId: string };
+
+export function parseCategoryRoute(pathname: string): CategoryRoute | null {
+  if (pathname === '/catalog/categories' || pathname === '/catalog/categories/') {
+    return { view: 'list' };
+  }
+  const categoryMatch = pathname.match(/^\/catalog\/categories\/([^/]+)\/?$/);
+  if (categoryMatch?.[1]) {
+    return { view: 'detail', categoryId: decodeURIComponent(categoryMatch[1]) };
+  }
+  return null;
+}
+
+export function categoryDetailPath(categoryId: string) {
+  return `/catalog/categories/${encodeURIComponent(categoryId)}`;
+}
+
+export function categoryListPath() {
+  return '/catalog/categories';
+}
+
+export function createProductPath(categoryId?: string) {
+  return categoryId ? `/catalog/products/new?category=${encodeURIComponent(categoryId)}` : '/catalog/products/new';
+}

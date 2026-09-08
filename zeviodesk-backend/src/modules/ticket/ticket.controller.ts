@@ -8,18 +8,44 @@ import { ForbiddenError, ValidationError } from "../../errors/AppError.js";
 import { assertTicketHasNoInvoice } from "../../services/billing.service.js";
 
 export const ticketController = {
+  repairCompleted: asyncHandler(async (req: CustomRequest, res: Response) => {
+    if (req.user?.role === "TECHNICIAN") {
+      throw new ForbiddenError("Technicians do not have access to the Repair Completed queue");
+    }
+    const data = await ticketService.getRepairCompleted(req.tenantId);
+    return sendSuccess(res, data, "Repair completed tickets retrieved");
+  }),
+
   readyForPickup: asyncHandler(async (req: CustomRequest, res: Response) => {
+    if (req.user?.role === "TECHNICIAN") {
+      throw new ForbiddenError("Technicians do not have access to the Ready for Pickup queue");
+    }
     const data = await ticketService.getReadyForPickup(req.tenantId);
     return sendSuccess(res, data, "Ready for pickup tickets retrieved");
   }),
 
+  completeRepair: asyncHandler(async (req: CustomRequest, res: Response) => {
+    const data = await ticketService.completeRepair(
+      req.params.id,
+      req.tenantId,
+      req.user?.id,
+      req.user?.role
+    );
+    return sendSuccess(res, data, "Repair completed successfully");
+  }),
+
   deliver: asyncHandler(async (req: CustomRequest, res: Response) => {
-    const data = await ticketService.deliverTicket(req.params.id, req.tenantId);
+    if (req.user?.role === "TECHNICIAN") {
+      throw new ForbiddenError("Technicians cannot deliver tickets");
+    }
+    const data = await ticketService.deliverTicket(req.params.id, req.tenantId, req.user?.id);
     return sendSuccess(res, data, "Ticket marked as delivered");
   }),
 
   getAll: asyncHandler(async (req: CustomRequest, res: Response) => {
     const status = req.query.status as string | undefined;
+    const priority = req.query.priority as string | undefined;
+    const search = (req.query.search || req.query.q) as string | undefined;
     const role = req.user?.role;
     const assignedToId = role === "TECHNICIAN" ? req.user?.id : undefined;
 
@@ -36,10 +62,20 @@ export const ticketController = {
 
     const { page, limit, skip } = parsePagination(req.query);
     const { data, total } = await ticketService.getTickets(
-      req.tenantId, status, assignedToId, startDate, endDate, role, statusIn, skip, limit
+      req.tenantId,
+      status,
+      assignedToId,
+      startDate,
+      endDate,
+      role,
+      statusIn,
+      skip,
+      limit,
+      search,
+      priority
     );
-    const debugInfo = { role, tenantId: req.tenantId, statusIn, assignedToId, dataLength: data.length, v2: true };
-    return sendSuccess(res, data as any, "Tickets retrieved v2", 200, { ...(buildPaginatedMeta(total, page, limit)), debugInfo });
+    const debugInfo = { role, tenantId: req.tenantId, statusIn, assignedToId, dataLength: data.length, search, priority, total };
+    return sendSuccess(res, data as any, "Tickets retrieved v2", 200, { ...(buildPaginatedMeta(total, page, limit)), total, debugInfo });
   }),
 
   getOne: asyncHandler(async (req: CustomRequest, res: Response) => {
@@ -72,9 +108,16 @@ export const ticketController = {
       throw new ForbiddenError("You can only update tickets assigned to you");
     }
 
-    // Workflow guard: only ADVISOR/MANAGER/ADMIN can finalize (COMPLETED status)
-    if (req.user?.role === "TECHNICIAN" && req.body.status === "COMPLETED") {
-      throw new ForbiddenError("Technicians cannot set a ticket to Completed. Only Advisors and Admins can finalize tickets.");
+    // Workflow guard: Technicians cannot directly advance to READY_FOR_PICKUP, DELIVERED, or COMPLETED.
+    // They must use the "Complete Repair" action to transition to REPAIR_COMPLETED.
+    if (
+      req.user?.role === "TECHNICIAN" &&
+      req.body.status &&
+      ["READY_FOR_PICKUP", "DELIVERED", "COMPLETED"].includes(req.body.status)
+    ) {
+      throw new ForbiddenError(
+        "Technicians cannot set ticket status to READY_FOR_PICKUP or DELIVERED. Please use 'Complete Repair' action instead."
+      );
     }
 
     // Technicians cannot re-assign tickets to a different technician
@@ -82,18 +125,12 @@ export const ticketController = {
       throw new ForbiddenError("Technicians cannot reassign tickets. Contact an Advisor or Admin to change the assignment.");
     }
 
-    // Ensure invoice generation only happens when ticket is READY_FOR_PICKUP
-    if (
-      req.body.status === "COMPLETED" &&
-      ticket.status !== "READY_FOR_PICKUP" &&
-      ticket.status !== "COMPLETED"
-    ) {
-      throw new ValidationError("Ticket must be READY_FOR_PICKUP before generating an invoice");
-    }
+
 
     const actorRole = req.user?.role;
-    const updated = await ticketService.updateTicket(req.params.id, req.body, req.tenantId, actorRole);
+    const updated = await ticketService.updateTicket(req.params.id, req.body, req.tenantId, actorRole, req.user?.id);
     return sendSuccess(res, updated, "Ticket updated");
+
   }),
 
   delete: asyncHandler(async (req: CustomRequest, res: Response) => {

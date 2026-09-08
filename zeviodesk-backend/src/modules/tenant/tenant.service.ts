@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { tenantRepository } from "./tenant.repository.js";
 import { generateSlug } from "../../utils/generateSlug.js";
 import { activityService } from "../../services/activity.service.js";
-import { generateTenantLogoPresign } from "../../services/s3-upload.service.js";
+import { generateTenantLogoPresign, getPublicUrl, extractObjectKey } from "../../services/s3-upload.service.js";
 import { TenantStatus } from "@prisma/client";
 import { prisma } from "../../config/prisma.js";
 import { logger } from "../../config/logger.js";
@@ -103,7 +103,7 @@ export const tenantService = {
       adminName: dto.adminName,
       adminEmail: dto.adminEmail,
       adminPhone: dto.adminPhone,
-      logoUrl: dto.logoUrl,
+      logoUrl: dto.logoUrl ? extractObjectKey(dto.logoUrl) : dto.logoUrl,
       setupToken: hashedSetupToken,
       setupTokenExpiry,
     });
@@ -156,10 +156,19 @@ export const tenantService = {
   },
 
   updateTenant: async (id: string, data: any) => {
+    const statusUpper = data.status ? String(data.status).toUpperCase() : undefined;
+    const prismaStatus = statusUpper === "ACTIVE"
+      ? TenantStatus.ACTIVE
+      : statusUpper === "SUSPENDED"
+      ? TenantStatus.SUSPENDED
+      : statusUpper === "PENDING"
+      ? TenantStatus.PENDING
+      : undefined;
+
     const updated = await tenantRepository.update(id, {
       name: data.name,
       plan: data.plan,
-      status: data.status,
+      status: prismaStatus,
       // extra fields stored as JSON in metadata (see repository)
       description: data.description,
       businessEmail: data.businessEmail,
@@ -170,8 +179,7 @@ export const tenantService = {
       secondaryColor: data.secondaryColor,
       adminName: data.adminName,
       adminEmail: data.adminEmail,
-      adminPhone: data.adminPhone,
-      logoUrl: data.logoUrl,
+      logoUrl: data.logoUrl !== undefined ? (data.logoUrl ? extractObjectKey(data.logoUrl) : null) : undefined,
     });
 
     await activityService.log(
@@ -242,7 +250,7 @@ function formatTenant(tenant: any) {
     status: statusMap[tenant.status] ?? "Active",
     plan: tenant.plan || "FREE",
     monthlyRevenue: tenant.monthlyRevenue || "$0",
-    logoUrl: tenant.logoUrl || null,
+    logoUrl: getPublicUrl(tenant.logoUrl),
     createdAt: formatDate(tenant.createdAt),
     updatedAt: formatDateTime(tenant.updatedAt),
   };
