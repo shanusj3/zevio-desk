@@ -25,6 +25,8 @@ import { getStatusLabel, getStatusBadge, getPriorityBadge, getPriorityTextStyle,
 import { StatusBadge } from './StatusBadge';
 import { SearchInput } from './ui/SearchInput';
 
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+
 interface TicketsTableProps {
   isHeaderOut?: boolean;
   onSelectTicket: (ticket: Ticket) => void;
@@ -78,7 +80,7 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
   const { showToast } = useAppStore();
 
   const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('All');
   const [datePreset, setDatePreset] = useState<string>('All Time');
@@ -135,14 +137,6 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
       if (saved.columnOrder) setColumnOrder(saved.columnOrder);
     }
   }, [dbPreferences]);
-
-  // Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchInput);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
 
   // Calculate startDate & endDate from presets
   const getDateRange = () => {

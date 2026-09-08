@@ -2,12 +2,13 @@ import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from '@tansta
 import { Tenant } from '../types';
 import { tenantsApi, FetchTenantsParams, PaginatedTenants } from '../lib/api';
 import { applyAndCacheTheme } from '../lib/theme';
+import { queryKeys } from './queryKeys';
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 export function useTenantsQuery(params: FetchTenantsParams = {}) {
   return useQuery({
-    queryKey: ['tenants', params],
+    queryKey: queryKeys.tenants.list(params),
     queryFn: () => tenantsApi.fetchAll(params),
     staleTime: 1000 * 60 * 2, // 2 minutes cache
     retry: 2,
@@ -16,7 +17,7 @@ export function useTenantsQuery(params: FetchTenantsParams = {}) {
 
 export function useInfiniteTenantsQuery(params: FetchTenantsParams = {}) {
   return useInfiniteQuery<PaginatedTenants, Error>({
-    queryKey: ['tenants-infinite', params.search, params.status, params.alphabet],
+    queryKey: queryKeys.tenants.infinite(params.search, params.status, params.alphabet),
     queryFn: ({ pageParam = 1 }) => tenantsApi.fetchAll({ ...params, page: pageParam as number }),
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
     initialPageParam: 1,
@@ -27,7 +28,7 @@ export function useInfiniteTenantsQuery(params: FetchTenantsParams = {}) {
 
 export function useTenantQuery(id: string | undefined) {
   return useQuery({
-    queryKey: ['tenant', id],
+    queryKey: queryKeys.tenants.detail(id),
     queryFn: () => tenantsApi.fetchOne(id!),
     enabled: !!id,
   });
@@ -51,9 +52,9 @@ export function useCreateTenantMutation() {
       return tenantsApi.create(finalData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['tenants-infinite'] });
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.infinite() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reports.all });
     },
   });
 }
@@ -72,11 +73,11 @@ export function useUpdateTenantMutation() {
       return tenantsApi.update(finalData.id, finalData);
     },
     onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['tenants-infinite'] });
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['invoicingSettings'] });
-      queryClient.setQueryData(['tenant', updated.id], updated);
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.infinite() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reports.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.settings() });
+      queryClient.setQueryData(queryKeys.tenants.detail(updated.id), updated);
       if (updated.primaryColor) {
         applyAndCacheTheme({
           primaryColor: updated.primaryColor,
@@ -92,9 +93,9 @@ export function useToggleTenantStatusMutation() {
   return useMutation({
     mutationFn: (id: string) => tenantsApi.toggleStatus(id),
     onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['tenants-infinite'] });
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.infinite() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reports.all });
       return updated;
     },
   });
@@ -105,10 +106,9 @@ export function useDeleteTenantMutation() {
   return useMutation({
     mutationFn: (id: string) => tenantsApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['tenants-infinite'] });
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tenants.infinite() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.reports.all });
     },
   });
 }
-

@@ -1,11 +1,13 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ticketsApi, FetchTicketsParams, PaginatedTicketsResult, Payment, paymentsApi, CreateTicketPayload, UpdateTicketPayload } from '../lib/api';
+import { lineItemsApi, invoiceApi, TicketLineItem, Invoice, InvoiceDraftSummary } from '../lib/api';
+import { queryKeys } from './queryKeys';
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 export function useTicketsQuery(params: FetchTicketsParams = {}) {
   return useQuery<Ticket[], Error>({
-    queryKey: ['tickets', params],
+    queryKey: queryKeys.tickets.list(params),
     queryFn: () => ticketsApi.fetchAll(params),
     staleTime: 1000 * 60 * 2, // 2 minutes cache
     retry: 2,
@@ -14,7 +16,7 @@ export function useTicketsQuery(params: FetchTicketsParams = {}) {
 
 export function usePaginatedTicketsQuery(params: FetchTicketsParams = {}) {
   return useQuery<PaginatedTicketsResult, Error>({
-    queryKey: ['tickets-paginated', params],
+    queryKey: queryKeys.tickets.paginated(params),
     queryFn: () => ticketsApi.fetchPaginated(params),
     staleTime: 1000 * 30,
     retry: 2,
@@ -23,7 +25,7 @@ export function usePaginatedTicketsQuery(params: FetchTicketsParams = {}) {
 
 export function useInfiniteTicketsQuery(params: Omit<FetchTicketsParams, 'page'> = {}) {
   return useInfiniteQuery<PaginatedTicketsResult, Error>({
-    queryKey: ['tickets-infinite', params],
+    queryKey: queryKeys.tickets.infinite(params),
     queryFn: ({ pageParam = 1 }) =>
       ticketsApi.fetchPaginated({ ...params, page: pageParam as number, limit: 20 }),
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
@@ -35,7 +37,7 @@ export function useInfiniteTicketsQuery(params: Omit<FetchTicketsParams, 'page'>
 
 export function useTicketQuery(id: string | undefined) {
   return useQuery<Ticket, Error>({
-    queryKey: ['ticket', id],
+    queryKey: queryKeys.tickets.detail(id),
     queryFn: () => ticketsApi.fetchOne(id!),
     enabled: !!id,
   });
@@ -48,7 +50,7 @@ export function useCreateTicketMutation() {
   return useMutation({
     mutationFn: (data: CreateTicketPayload) => ticketsApi.create(data),
     onSuccess: (created) => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
       window.dispatchEvent(new CustomEvent('zevio:ticket-assigned', { detail: created }));
     },
   });
@@ -60,8 +62,8 @@ export function useUpdateTicketMutation() {
     mutationFn: (variables: { id: string; data: UpdateTicketPayload }) =>
       ticketsApi.update(variables.id, variables.data),
     onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', updated.id] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(updated.id) });
       window.dispatchEvent(new CustomEvent('zevio:ticket-assigned', { detail: updated }));
     },
   });
@@ -72,7 +74,7 @@ export function useDeleteTicketMutation() {
   return useMutation({
     mutationFn: (id: string) => ticketsApi.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
     },
   });
 }
@@ -82,9 +84,9 @@ export function useCompleteRepairMutation() {
   return useMutation({
     mutationFn: (id: string) => ticketsApi.completeRepair(id),
     onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', updated.id] });
-      queryClient.invalidateQueries({ queryKey: ['repair-completed'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(updated.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.repairCompleted });
       window.dispatchEvent(new CustomEvent('zevio:ticket-assigned', { detail: updated }));
     },
   });
@@ -94,7 +96,7 @@ export function useCompleteRepairMutation() {
 
 export function usePaymentsQuery(ticketId: string | undefined) {
   return useQuery<Payment[], Error>({
-    queryKey: ['payments', ticketId],
+    queryKey: queryKeys.payments.byTicket(ticketId),
     queryFn: () => paymentsApi.list(ticketId!),
     enabled: !!ticketId,
   });
@@ -106,11 +108,11 @@ export function useCreatePaymentMutation() {
     mutationFn: (variables: { ticketId: string; data: Partial<Payment> }) =>
       paymentsApi.create(variables.ticketId, variables.data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['payments', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
     },
   });
 }
@@ -121,21 +123,20 @@ export function useDeletePaymentMutation() {
     mutationFn: (variables: { ticketId: string; paymentId: string }) =>
       paymentsApi.delete(variables.ticketId, variables.paymentId),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['payments', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
     },
   });
 }
 
 // ─── Line Items & Invoices ───────────────────────────────────────────────────
-import { lineItemsApi, invoiceApi, TicketLineItem, Invoice, InvoiceDraftSummary } from '../lib/api';
 
 export function useLineItemsQuery(ticketId: string | undefined) {
   return useQuery<TicketLineItem[], Error>({
-    queryKey: ['line-items', ticketId],
+    queryKey: queryKeys.lineItems.byTicket(ticketId),
     queryFn: () => lineItemsApi.list(ticketId!),
     enabled: !!ticketId,
   });
@@ -147,12 +148,12 @@ export function useAddLineItemMutation() {
     mutationFn: (variables: { ticketId: string; data: Partial<TicketLineItem> }) =>
       lineItemsApi.add(variables.ticketId, variables.data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['line-items', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lineItems.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.inventory.movements() });
     },
   });
 }
@@ -163,12 +164,12 @@ export function useUpdateLineItemMutation() {
     mutationFn: (variables: { ticketId: string; lineItemId: string; data: Partial<TicketLineItem> }) =>
       lineItemsApi.update(variables.ticketId, variables.lineItemId, variables.data),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['line-items', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lineItems.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.inventory.movements() });
     },
   });
 }
@@ -179,20 +180,20 @@ export function useRemoveLineItemMutation() {
     mutationFn: (variables: { ticketId: string; lineItemId: string }) =>
       lineItemsApi.remove(variables.ticketId, variables.lineItemId),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['line-items', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoice', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['payments', variables.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-movements'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lineItems.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.payments.byTicket(variables.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.inventory.movements() });
     },
   });
 }
 
 export function useInvoiceQuery(ticketId: string | undefined) {
   return useQuery<Invoice | InvoiceDraftSummary, Error>({
-    queryKey: ['invoice', ticketId],
+    queryKey: queryKeys.invoices.byTicket(ticketId),
     queryFn: () => invoiceApi.get(ticketId!),
     enabled: !!ticketId,
   });
@@ -204,10 +205,10 @@ export function useFinalizeInvoiceMutation() {
     mutationFn: (variables: { ticketId: string; data: { invoiceNumber?: string; notes?: string; dueDate?: string } }) =>
       invoiceApi.finalize(variables.ticketId, variables.data),
     onSuccess: (invoice) => {
-      queryClient.invalidateQueries({ queryKey: ['invoice', invoice.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', invoice.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(invoice.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(invoice.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
     },
   });
 }
@@ -218,11 +219,10 @@ export function useVoidInvoiceMutation() {
     mutationFn: (variables: { ticketId: string; data: { reason: string } }) =>
       invoiceApi.void(variables.ticketId, variables.data),
     onSuccess: (invoice) => {
-      queryClient.invalidateQueries({ queryKey: ['invoice', invoice.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['ticket', invoice.ticketId] });
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.byTicket(invoice.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.detail(invoice.ticketId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tickets.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.all });
     },
   });
 }
-

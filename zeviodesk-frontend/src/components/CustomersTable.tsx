@@ -12,6 +12,8 @@ interface CustomersTableProps {
   onTotalCountChange?: (count: number) => void;
 }
 
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+
 export const CustomersTable: React.FC<CustomersTableProps> = ({
   onEditCustomer,
   onDeleteCustomer,
@@ -20,7 +22,7 @@ export const CustomersTable: React.FC<CustomersTableProps> = ({
   onTotalCountChange,
 }) => {
   const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(searchInput, 500);
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'All' | 'WALK_IN' | 'RETURNING' | 'BUSINESS'>('All');
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -55,11 +57,6 @@ export const CustomersTable: React.FC<CustomersTableProps> = ({
 
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const custCloseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(searchInput), 500);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isFetching } = useInfiniteCustomersQuery({
     search: debouncedSearch,

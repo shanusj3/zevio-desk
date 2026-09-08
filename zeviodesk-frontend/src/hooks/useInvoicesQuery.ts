@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoicesListApi, invoiceSettingsApi, InvoiceListItem, InvoicingSettings, request } from '../lib/api';
 import { applyAndCacheTheme } from '../lib/theme';
+import { queryKeys } from './queryKeys';
 
 // ── Invoice List ──────────────────────────────────────────────────────────────
 export function useInvoicesListQuery(params?: { paymentStatus?: string; q?: string }) {
   return useQuery<InvoiceListItem[], Error>({
-    queryKey: ['invoices', params],
+    queryKey: queryKeys.invoices.list(params),
     queryFn: () => invoicesListApi.list(params),
   });
 }
@@ -17,7 +18,7 @@ export function useInvoicingSettingsQuery() {
   const path = paramSlug ? `/settings/invoicing?tenant=${encodeURIComponent(paramSlug)}` : '/settings/invoicing';
 
   return useQuery<InvoicingSettings, Error>({
-    queryKey: ['invoicingSettings', paramSlug],
+    queryKey: queryKeys.invoices.settings(paramSlug),
     queryFn: () => request<InvoicingSettings>(path),
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -29,10 +30,7 @@ export function useUpdateInvoiceTemplateMutation() {
   return useMutation<InvoicingSettings, Error, InvoicingSettings>({
     mutationFn: (data) => invoiceSettingsApi.update(data),
     onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['invoicingSettings'] });
-      // Immediately apply the tenant theme so the dashboard reflects the
-      // updated primary color without waiting for the AppLayout useEffect
-      // to re-fire from the refetched query.
+      queryClient.invalidateQueries({ queryKey: queryKeys.invoices.settings() });
       if (updated.primaryColor) {
         applyAndCacheTheme({
           primaryColor: updated.primaryColor,
