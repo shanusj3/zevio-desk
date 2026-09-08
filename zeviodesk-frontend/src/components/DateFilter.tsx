@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronDown, Check, X } from 'lucide-react';
 import { DateFilterOption, DateRange } from '../lib/filterUtils';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 
 interface DateFilterProps {
   option: DateFilterOption;
@@ -128,41 +130,37 @@ export const DateFilter: React.FC<DateFilterProps> = ({
 
             {/* Modal Content */}
             <div className="p-6 space-y-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-xs uppercase tracking-wider text-[#64748b] font-semibold">Start Date</label>
-                <input
-                  type="date"
-                  value={tempStart}
-                  onChange={(e) => setTempStart(e.target.value)}
-                  className="w-full h-11 px-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-sm text-[#1e293b] outline-none focus:border-[#116dff] focus:ring-2 focus:ring-[#116dff]/15 [color-scheme:light]"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-xs uppercase tracking-wider text-[#64748b] font-semibold">End Date</label>
-                <input
-                  type="date"
-                  value={tempEnd}
-                  onChange={(e) => setTempEnd(e.target.value)}
-                  className="w-full h-11 px-4 bg-[#f8fafc] border border-[#e2e8f0] rounded-xl text-sm text-[#1e293b] outline-none focus:border-[#116dff] focus:ring-2 focus:ring-[#116dff]/15 [color-scheme:light]"
-                />
-              </div>
+              <Input
+                label="Start Date"
+                type="date"
+                value={tempStart}
+                onChange={(e) => setTempStart(e.target.value)}
+                className="[color-scheme:light]"
+              />
+              <Input
+                label="End Date"
+                type="date"
+                value={tempEnd}
+                onChange={(e) => setTempEnd(e.target.value)}
+                className="[color-scheme:light]"
+              />
             </div>
 
             {/* Modal Footer */}
             <div className="px-6 py-4 bg-[#f8fafc] border-t border-[#e2e8f0] flex items-center justify-end gap-3">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-sm font-semibold text-[#64748b] hover:text-[#1e293b] transition-colors"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
                 onClick={handleApply}
                 disabled={!tempStart || !tempEnd || new Date(tempStart) > new Date(tempEnd)}
-                className="px-5 py-2 bg-[#116dff] hover:bg-[#0d5fd9] disabled:bg-[#116dff]/30 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-all shadow-sm"
               >
                 Apply Range
-              </button>
+              </Button>
             </div>
           </div>
         </div>

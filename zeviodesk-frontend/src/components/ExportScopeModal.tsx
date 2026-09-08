@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { Button } from './ui/Button';
 
 export type ExportScope = 'all' | 'filtered';
 
@@ -85,20 +86,20 @@ export const ExportScopeModal: React.FC<ExportScopeModalProps> = ({
           <p className="text-sm text-[#64748B]">{description}</p>
         </div>
 
-        <div className="flex items-center justify-end gap-4 px-6 py-5">
-          <button
+        <div className="flex items-center justify-end gap-3 px-6 py-5">
+          <Button
+            variant="ghost"
             onClick={onClose}
-            className="text-sm font-semibold text-[#116dff] hover:underline cursor-pointer"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => onExport(scope)}
-            disabled={isExporting}
-            className="px-6 h-10 bg-[#116dff] hover:bg-[#0d5fd9] disabled:opacity-60 text-white font-semibold rounded-full text-sm transition-colors cursor-pointer"
+            isLoading={isExporting}
           >
-            {isExporting ? 'Exporting…' : 'Export'}
-          </button>
+            Export
+          </Button>
         </div>
 
         {note && (

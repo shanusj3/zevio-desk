@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, AlertTriangle, AlertCircle, HelpCircle, Trash2, Loader2 } from 'lucide-react';
+import { X, AlertTriangle, AlertCircle, HelpCircle, Trash2 } from 'lucide-react';
+import { Button } from './ui/Button';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -108,29 +109,25 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center justify-end gap-3 pt-4">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={onCancel}
-              className="px-5 py-2.5 bg-[#eaeff5] hover:bg-[#dfe6f0] text-[#475569] rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+              leftIcon={<X className="w-3.5 h-3.5" />}
             >
-              <X className="w-3.5 h-3.5" />
               {cancelText}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant={type === 'danger' ? 'danger' : 'primary'}
+              size="sm"
               onClick={onConfirm}
-              disabled={isLoading}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ${getConfirmButtonClass()}`}
+              isLoading={isLoading}
+              leftIcon={<Trash2 className="w-3.5 h-3.5" />}
             >
-              {isLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <>
-                  <Trash2 className="w-3.5 h-3.5" />
-                  {confirmText}
-                </>
-              )}
-            </button>
+              {confirmText}
+            </Button>
           </div>
         </div>
       </div>
