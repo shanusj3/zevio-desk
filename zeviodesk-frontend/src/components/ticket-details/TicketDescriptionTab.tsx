@@ -1,6 +1,6 @@
 import React from 'react';
 import { Ticket } from '../../lib/api';
-import { formatTicketReference } from '../../lib/ticketDisplay';
+import { formatTicketReference, formatDeviceTitle } from '../../lib/ticketDisplay';
 import { StatusBadge } from '../StatusBadge';
 
 function defaultGetPriorityStyle(priority: Ticket['priority']) {
@@ -46,7 +46,7 @@ export const TicketDescriptionTab: React.FC<TicketDescriptionTabProps> = ({
           <div className="bg-[#f8fafc] border border-[#e2e8f0] rounded-xl p-4 divide-y divide-[#e2e8f0]">
             <div className="flex justify-between py-2 items-center">
               <span className="font-semibold text-[#64748b]">Device / Model</span>
-              <span className="font-bold text-[#1e293b] text-right">{ticket.title}</span>
+              <span className="font-bold text-[#1e293b] text-right">{formatDeviceTitle(ticket.brand, ticket.model, ticket.title)}</span>
             </div>
             <div className="flex justify-between py-2 items-center">
               <span className="font-semibold text-[#64748b]">Job # / Reference</span>

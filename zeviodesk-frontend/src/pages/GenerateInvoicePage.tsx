@@ -22,6 +22,7 @@ import { PartSearchCombo } from '../components/PartSearchCombo';
 import { Dialog } from '../components/ui/Dialog';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { formatCurrency } from '../utils/formatters';
+import { formatDeviceTitle } from '../lib/ticketDisplay';
 
 interface GenerateInvoicePageProps {
   ticket: Ticket;
@@ -729,7 +730,7 @@ export const GenerateInvoicePage: React.FC<GenerateInvoicePageProps> = ({ ticket
               <div className="space-y-1.5 font-mono sm:text-right">
                 <div className="flex justify-between sm:justify-end gap-2"><span className="text-gray-500 font-semibold">Phone:</span><span className="text-gray-800 font-bold">{ticket.customer?.phone || 'N/A'}</span></div>
                 <div className="flex justify-between sm:justify-end gap-2"><span className="text-gray-500 font-semibold">Job ID:</span><span className="text-gray-800 font-bold">#{ticket.jobNumber || ticket.id.slice(0, 8)}</span></div>
-                <div className="flex justify-between sm:justify-end gap-2"><span className="text-gray-500 font-semibold">Device:</span><span className="text-gray-800 font-bold">{[ticket.brand, ticket.model].filter(Boolean).join(' ') || 'Device'}</span></div>
+                <div className="flex justify-between sm:justify-end gap-2"><span className="text-gray-500 font-semibold">Device:</span><span className="text-gray-800 font-bold">{formatDeviceTitle(ticket.brand, ticket.model, ticket.title) || 'Device'}</span></div>
               </div>
             </div>
 
@@ -1763,7 +1764,7 @@ export const GenerateInvoicePage: React.FC<GenerateInvoicePageProps> = ({ ticket
                   <div className="space-y-1 text-right">
                     <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px] block">Ticket Details:</span>
                     <p className="font-bold text-slate-900">Job Reference: #{ticket.jobNumber || ticket.ticketNumber}</p>
-                    <p className="text-slate-700">Device: {[ticket.brand, ticket.model].filter(Boolean).join(' ') || ticket.title}</p>
+                    <p className="text-slate-700">Device: {formatDeviceTitle(ticket.brand, ticket.model, ticket.title)}</p>
                     <p className="text-slate-700">Payment Status: <strong className="text-slate-900 font-bold">PAID (₹{totals.total})</strong></p>
                   </div>
                 </div>

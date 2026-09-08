@@ -5,6 +5,7 @@ import { ReadyForPickupTicket, ticketsApi } from '../lib/api';
 import { navigate, ticketBillingPath } from '../lib/navigation';
 import { TableRowSkeleton } from '../components/Skeleton';
 import { formatCurrency } from '../utils/formatters';
+import { formatDeviceTitle } from '../lib/ticketDisplay';
 
 const money = (value: string | number | null | undefined) =>
   formatCurrency(value, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -143,7 +144,7 @@ export function RepairCompletedPage() {
                       <td className="py-4 px-5">
                         <div className="flex flex-col">
                           <span className="text-[#1e293b] text-sm font-semibold">
-                            {[ticket.brand, ticket.model].filter(Boolean).join(' ') || ticket.title}
+                            {formatDeviceTitle(ticket.brand, ticket.model, ticket.title)}
                           </span>
                           <span
                             className="text-xs text-[#64748B] truncate max-w-[240px] mt-0.5"

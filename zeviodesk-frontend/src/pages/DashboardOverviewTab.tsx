@@ -9,6 +9,7 @@ import { useTicketsQuery } from '../hooks/useTicketsQuery';
 import { useInventoryItemsQuery } from '../hooks/useInventoryQuery';
 import { ticketsApi, reportsApi, Ticket } from '../lib/api';
 import { useAppStore } from '../store/useAppStore';
+import { formatDeviceTitle } from '../lib/ticketDisplay';
 import { navigate, ticketDetailPath } from '../lib/navigation';
 import { DateFilterOption, DateRange, getDateRangeParams } from '../lib/filterUtils';
 import { getRoleDefaultStatuses } from '../lib/ticketDisplay';
@@ -120,7 +121,7 @@ export const DashboardOverviewTab: React.FC<DashboardOverviewTabProps> = ({
     const rows = sourceList.map((t) => [
       t.jobNumber || t.id,
       t.customerId || '',
-      `${t.brand || ''} ${t.model || ''}`.trim(),
+      formatDeviceTitle(t.brand, t.model, t.title),
       t.status,
       String(t.estimatedCost || 0),
       String(t.totalAmount || 0),

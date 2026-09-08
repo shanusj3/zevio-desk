@@ -30,6 +30,7 @@ import { useAppStore } from '../store/useAppStore';
 import { navigate, ticketDetailPath } from '../lib/navigation';
 import { CreateCustomerModal } from '../components/CreateCustomerModal';
 import { CreateEmployeeModal } from '../components/CreateEmployeeModal';
+import { formatDeviceTitle } from '../lib/ticketDisplay';
 
 interface CreateTicketPageProps {
   onBack: () => void;
@@ -240,9 +241,7 @@ export function CreateTicketPage({ onBack }: CreateTicketPageProps) {
       }
     }
 
-    const titleText = catalogResolution.brand
-      ? `${catalogResolution.brand} ${catalogResolution.model}`
-      : catalogResolution.model;
+    const titleText = formatDeviceTitle(catalogResolution.brand, catalogResolution.model);
 
     const payload: CreateTicketPayload = {
       customerId: selectedCustomer.id,

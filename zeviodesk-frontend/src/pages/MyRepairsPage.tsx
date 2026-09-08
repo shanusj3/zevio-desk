@@ -6,6 +6,7 @@ import { useCompleteRepairMutation } from '../hooks/useTicketsQuery';
 import { navigate } from '../lib/navigation';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { TableRowSkeleton } from '../components/Skeleton';
+import { formatDeviceTitle } from '../lib/ticketDisplay';
 import { StatusBadge } from '../components/StatusBadge';
 
 export function MyRepairsPage() {
@@ -199,7 +200,7 @@ export function MyRepairsPage() {
                       <td className="py-4 px-5">
                         <div className="flex flex-col">
                           <span className="text-[#1e293b] text-sm font-semibold">
-                            {[ticket.brand, ticket.model].filter(Boolean).join(' ') || ticket.title}
+                            {formatDeviceTitle(ticket.brand, ticket.model, ticket.title)}
                           </span>
                           <span
                             className="text-xs text-[#64748B] truncate max-w-[240px] mt-0.5"

@@ -100,3 +100,65 @@ export function getWarrantyDisplay(warrantyStatus?: string | null): { label: str
   }
   return { label: '🛡 Active', badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold', isactive: true };
 }
+
+/**
+ * Safely formats device title from brand and model, preventing duplicate brand prefixing.
+ * Handles cases where model already starts with the brand name or contains duplicated brand words.
+ */
+export function formatDeviceTitle(
+  brand?: string | null,
+  model?: string | null,
+  fallbackTitle?: string | null
+): string {
+  const b = (brand || '').trim();
+  let m = (model || '').trim();
+  const fallback = (fallbackTitle || '').trim();
+
+  // If model is missing, sanitize brand or fallback
+  if (!m) {
+    return sanitizeDuplicateBrandString(b || fallback);
+  }
+
+  // Sanitize any existing double-brand prefix inside model string
+  m = sanitizeDuplicateBrandString(m, b);
+
+  if (!b) {
+    return sanitizeDuplicateBrandString(m);
+  }
+
+  // If model already starts with brand (case-insensitive)
+  const bLower = b.toLowerCase();
+  const mLower = m.toLowerCase();
+
+  if (mLower.startsWith(bLower)) {
+    const remainder = m.slice(b.length);
+    // Check if remainder is empty or starts with non-alphanumeric or space (e.g., "Apple iPhone")
+    if (remainder.length === 0 || /^\s|^[^\w]/.test(remainder)) {
+      return sanitizeDuplicateBrandString(m, b);
+    }
+  }
+
+  return sanitizeDuplicateBrandString(`${b} ${m}`, b);
+}
+
+function sanitizeDuplicateBrandString(str: string, knownBrand?: string): string {
+  if (!str) return str;
+  let result = str.trim();
+
+  if (knownBrand && knownBrand.trim()) {
+    const kb = knownBrand.trim();
+    const escapedKb = kb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const doubleKnownRegex = new RegExp(`^(${escapedKb})\\s+\\1(\\s+|$)`, 'i');
+    while (doubleKnownRegex.test(result)) {
+      result = result.replace(doubleKnownRegex, '$1$2').trim();
+    }
+  }
+
+  // Generic double leading word check e.g. "Apple Apple iPhone" -> "Apple iPhone"
+  const genericDoubleRegex = /^([A-Za-z0-9]+)\s+\1(\s+|$)/i;
+  while (genericDoubleRegex.test(result)) {
+    result = result.replace(genericDoubleRegex, '$1$2').trim();
+  }
+
+  return result;
+}

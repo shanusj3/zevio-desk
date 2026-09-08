@@ -15,6 +15,7 @@ import {
 } from '../hooks/useTicketsQuery';
 import { useAppStore } from '../store/useAppStore';
 import { formatCurrency } from '../utils/formatters';
+import { formatDeviceTitle } from '../lib/ticketDisplay';
 
 interface NewInvoicePageProps {
   onBack: () => void;
@@ -123,7 +124,7 @@ const TicketRow: React.FC<{ ticket: Ticket; onSelect: (t: Ticket) => void }> = (
         <p className="text-sm font-semibold text-white group-hover:text-[#D99B26] transition">{ticket.customer?.name ?? '—'}</p>
         {ticket.jobNumber && <span className="text-[10px] font-mono text-[#475569]">{ticket.jobNumber}</span>}
       </div>
-      <p className="text-xs text-[#64748B] mt-0.5 truncate">{[ticket.brand, ticket.model].filter(Boolean).join(' ') || '—'}</p>
+      <p className="text-xs text-[#64748B] mt-0.5 truncate">{formatDeviceTitle(ticket.brand, ticket.model, ticket.title) || '—'}</p>
     </div>
     <div className="text-right shrink-0">
       {ticket.totalAmount != null && ticket.totalAmount > 0 && (
@@ -223,7 +224,7 @@ const PaymentStep: React.FC<{ ticket: Ticket; onBack: () => void; onDone: () => 
             {ticket.jobNumber && (
               <p className="text-xs font-mono font-semibold text-[#D99B26]">{ticket.jobNumber}</p>
             )}
-            <p className="text-xs text-[#64748B] mt-0.5">{[ticket.brand, ticket.model].filter(Boolean).join(' ') || '—'}</p>
+            <p className="text-xs text-[#64748B] mt-0.5">{formatDeviceTitle(ticket.brand, ticket.model, ticket.title) || '—'}</p>
             <span className={`mt-1 inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full ${
               ticket.status === 'READY_FOR_PICKUP'
                 ? 'bg-emerald-500/10 text-emerald-400'

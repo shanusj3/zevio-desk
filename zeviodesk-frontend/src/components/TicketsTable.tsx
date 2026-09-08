@@ -21,7 +21,7 @@ import { useInfiniteTicketsQuery } from '../hooks/useTicketsQuery';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TableRowSkeleton } from './Skeleton';
 import { useAppStore } from '../store/useAppStore';
-import { getStatusLabel, getStatusBadge, getPriorityBadge, getPriorityTextStyle, getWarrantyDisplay } from '../lib/ticketDisplay';
+import { getStatusLabel, getStatusBadge, getPriorityBadge, getPriorityTextStyle, getWarrantyDisplay, formatDeviceTitle } from '../lib/ticketDisplay';
 import { StatusBadge } from './StatusBadge';
 import { SearchInput } from './ui/SearchInput';
 
@@ -701,9 +701,14 @@ export const TicketsTable: React.FC<TicketsTableProps> = ({
                       return (
                         <td key={colId} className="py-4 px-5 text-[#1e293b]">
                           <div className="flex flex-col min-w-0">
-                            <span className="truncate max-w-[200px] text-[#1e293b] text-sm font-semibold" title={ticket.title}>
-                              {ticket.title}
-                            </span>
+                            {(() => {
+                              const displayTitle = formatDeviceTitle(ticket.brand, ticket.model, ticket.title);
+                              return (
+                                <span className="truncate max-w-[200px] text-[#1e293b] text-sm font-semibold" title={displayTitle}>
+                                  {displayTitle}
+                                </span>
+                              );
+                            })()}
                             <span className="text-xs text-[#64748B] font-normal truncate max-w-[200px] mt-0.5">
                               {ticket.ticketNumber || ticket.jobNumber || ticket.description}
                             </span>
