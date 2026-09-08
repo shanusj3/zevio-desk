@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, ChevronDown, Loader2, Mail, MapPin, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AlertCircle, ChevronDown } from 'lucide-react';
 import { TenantUser } from '../lib/api';
 import { useCreateUserMutation, useUpdateUserMutation } from '../hooks/useUsersQuery';
 import { useAppStore } from '../store/useAppStore';
+import { Drawer } from './ui/Drawer';
+import { Button } from './ui/Button';
 
 interface CreateEmployeeModalProps {
   isOpen: boolean;
@@ -150,250 +151,227 @@ export const CreateEmployeeModal: React.FC<CreateEmployeeModalProps> = ({
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
-          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="fixed top-12 right-0 bottom-0 w-full max-w-2xl bg-white border-l border-[#e2e8f0] flex flex-col shadow-2xl z-40"
-        >
-          {/* Header */}
-          <div className="flex shrink-0 items-center justify-between px-6 py-5 border-b border-[#e2e8f0]">
-            <h2 className="text-lg font-bold tracking-tight text-[#1e293b]">
-              {employeeToEdit ? 'Edit Employee' : 'Register New Employee'}
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="rounded-md p-1.5 text-[#64748B] transition hover:bg-[#f1f5f9] hover:text-[#1e293b] cursor-pointer"
-            >
-              <X className="size-5" />
-            </button>
+    <Drawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title={employeeToEdit ? 'Edit Employee' : 'Register New Employee'}
+      maxWidth="2xl"
+      topOffset="top-12"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="employee-form"
+            variant="primary"
+            isLoading={isSubmitting}
+          >
+            {employeeToEdit ? 'Save Changes' : 'Register Employee'}
+          </Button>
+        </>
+      }
+    >
+      <form id="employee-form" onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Full Name */}
+        <div className="space-y-2.5">
+          <label className={labelStyle}>
+            Full Name <span className="text-[#116dff]">*</span>
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => handleInputChange('name', e.target.value)}
+            placeholder="Enter full name"
+            className={inputStyle}
+            autoFocus
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Email Address */}
+          <div className="space-y-2.5">
+            <label className={labelStyle}>
+              Email Address <span className="text-[#116dff]">*</span>
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
+              placeholder="Enter email address"
+              disabled={!!employeeToEdit}
+              className={`${inputStyle} disabled:opacity-50 disabled:cursor-not-allowed`}
+            />
           </div>
 
-          {/* Form */}
-          <form id="employee-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6">
-              {error && (
-                <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <AlertCircle className="size-4 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {/* Full Name */}
-              <div className="space-y-2.5">
-                <label className={labelStyle}>
-                  Full Name <span className="text-[#116dff]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  placeholder="Enter full name"
-                  className={inputStyle}
-                  autoFocus
-                />
+          {/* Phone Number */}
+          <div className="space-y-2.5">
+            <label className={labelStyle}>Phone Number</label>
+            <div className="flex h-[58px] overflow-hidden rounded-xl border border-[#cbd5e1] bg-white focus-within:border-[#116dff] focus-within:ring-2 focus-within:ring-[#116dff]/15">
+              <div className="relative shrink-0 border-r border-[#cbd5e1] bg-[#f8fafc]">
+                <select
+                  value={phonePrefix}
+                  onChange={(e) => setPhonePrefix(e.target.value)}
+                  className="h-full pl-5 pr-9 bg-transparent text-sm font-semibold text-[#334155] outline-none appearance-none cursor-pointer"
+                  style={{ accentColor: '#116dff' }}
+                >
+                  <option value="+91">+91</option>
+                  <option value="+1">+1</option>
+                  <option value="+44">+44</option>
+                  <option value="+971">+971</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 text-[#64748B]" />
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Email Address */}
-                <div className="space-y-2.5">
-                  <label className={labelStyle}>
-                    Email Address <span className="text-[#116dff]">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    placeholder="Enter email address"
-                    disabled={!!employeeToEdit}
-                    className={`${inputStyle} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  />
-                </div>
-
-                {/* Phone Number */}
-                <div className="space-y-2.5">
-                  <label className={labelStyle}>Phone Number</label>
-                  <div className="flex h-[58px] overflow-hidden rounded-xl border border-[#cbd5e1] bg-white focus-within:border-[#116dff] focus-within:ring-2 focus-within:ring-[#116dff]/15">
-                    <div className="relative shrink-0 border-r border-[#cbd5e1] bg-[#f8fafc]">
-                      <select
-                        value={phonePrefix}
-                        onChange={(e) => setPhonePrefix(e.target.value)}
-                        className="h-full pl-5 pr-9 bg-transparent text-sm font-semibold text-[#334155] outline-none appearance-none cursor-pointer"
-                        style={{ accentColor: '#116dff' }}
-                      >
-                        <option value="+91">+91</option>
-                        <option value="+1">+1</option>
-                        <option value="+44">+44</option>
-                        <option value="+971">+971</option>
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 size-4 text-[#64748B]" />
-                    </div>
-                    <input
-                      type="text"
-                      value={formData.phone}
-                      onChange={(e) => handleInputChange('phone', e.target.value)}
-                      placeholder="Enter phone number"
-                      className="min-w-0 flex-1 bg-transparent px-5 text-sm text-[#1e293b] placeholder:text-[#94a3b8] outline-none"
-                      inputMode="tel"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Password */}
-              <div className="space-y-2.5">
-                <label className={labelStyle}>
-                  Password {employeeToEdit ? <span className="text-[#64748B]">(Leave blank to keep same)</span> : <span className="text-[#116dff]">*</span>}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  placeholder={employeeToEdit ? 'Enter password to change' : 'Enter password (min 6 characters)'}
-                  className={inputStyle}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Role Custom Dropdown */}
-                <div className="space-y-2.5">
-                  <label className={labelStyle}>Role</label>
-                  <div className="relative" ref={roleDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setRoleDropdownOpen((prev) => !prev)}
-                      className={`${inputStyle} flex items-center justify-between pr-12 text-left cursor-pointer ${roleDropdownOpen ? 'border-[#116dff] ring-2 ring-[#116dff]/15' : ''}`}
-                    >
-                      <span>{roleLabels[formData.role]}</span>
-                    </button>
-                    <ChevronDown className={`pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-[#64748B] transition-transform ${roleDropdownOpen ? 'rotate-180' : ''}`} />
-                    {roleDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-lg">
-                        {(['ADVISOR', 'TECHNICIAN', 'MANAGER', 'TENANT_ADMIN'] as TenantUser['role'][]).map((r) => (
-                          <button
-                            key={r}
-                            type="button"
-                            onClick={() => {
-                              handleInputChange('role', r);
-                              setRoleDropdownOpen(false);
-                            }}
-                            className={`w-full px-5 py-3 text-left text-sm transition cursor-pointer ${
-                              formData.role === r
-                                ? 'bg-[#116dff] text-white font-semibold'
-                                : 'text-[#1e293b] hover:bg-[#f1f5f9]'
-                            }`}
-                          >
-                            {roleLabels[r]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status Custom Dropdown */}
-                <div className="space-y-2.5">
-                  <label className={labelStyle}>Status</label>
-                  <div className="relative" ref={statusDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => setStatusDropdownOpen((prev) => !prev)}
-                      className={`${inputStyle} flex items-center justify-between pr-12 text-left cursor-pointer ${statusDropdownOpen ? 'border-[#116dff] ring-2 ring-[#116dff]/15' : ''}`}
-                    >
-                      <span>{statusLabels[formData.status]}</span>
-                    </button>
-                    <ChevronDown className={`pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-[#64748B] transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
-                    {statusDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-lg">
-                        {(['ACTIVE', 'INACTIVE', 'SUSPENDED'] as TenantUser['status'][]).map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => {
-                              handleInputChange('status', s);
-                              setStatusDropdownOpen(false);
-                            }}
-                            className={`w-full px-5 py-3 text-left text-sm transition cursor-pointer ${
-                              formData.status === s
-                                ? 'bg-[#116dff] text-white font-semibold'
-                                : 'text-[#1e293b] hover:bg-[#f1f5f9]'
-                            }`}
-                          >
-                            {statusLabels[s]}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Max Concurrent Jobs — Technician only */}
-              {formData.role === 'TECHNICIAN' && (
-                <div className="space-y-2.5">
-                  <label className={labelStyle}>Max Concurrent Jobs</label>
-                  <input
-                    type="number"
-                    value={formData.maxConcurrentJobs}
-                    onChange={(e) => handleInputChange('maxConcurrentJobs', e.target.value)}
-                    placeholder="Enter max concurrent jobs"
-                    className={inputStyle}
-                  />
-                </div>
-              )}
-
-              {/* Address */}
-              <div className="space-y-2.5">
-                <label className={labelStyle}>Address <span className="text-[#64748B]">(optional)</span></label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  placeholder="Enter address"
-                  className={inputStyle}
-                />
-              </div>
-
-              {/* Emergency Contact */}
-              <div className="space-y-2.5">
-                <label className={labelStyle}>Emergency Contact <span className="text-[#64748B]">(optional)</span></label>
-                <input
-                  type="text"
-                  value={formData.emergencyContact}
-                  onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
-                  placeholder="Enter emergency contact number"
-                  className={inputStyle}
-                />
-              </div>
-
+              <input
+                type="text"
+                value={formData.phone}
+                onChange={(e) => handleInputChange('phone', e.target.value)}
+                placeholder="Enter phone number"
+                className="min-w-0 flex-1 bg-transparent px-5 text-sm text-[#1e293b] placeholder:text-[#94a3b8] outline-none"
+                inputMode="tel"
+              />
             </div>
+          </div>
+        </div>
 
-            {/* Footer */}
-            <div className="flex shrink-0 items-center justify-end gap-3 border-t border-[#e2e8f0] bg-[#f8fafc] px-6 py-5">
+        {/* Password */}
+        <div className="space-y-2.5">
+          <label className={labelStyle}>
+            Password {employeeToEdit ? <span className="text-[#64748B]">(Leave blank to keep same)</span> : <span className="text-[#116dff]">*</span>}
+          </label>
+          <input
+            type="password"
+            value={formData.password}
+            onChange={(e) => handleInputChange('password', e.target.value)}
+            placeholder={employeeToEdit ? 'Enter password to change' : 'Enter password (min 6 characters)'}
+            className={inputStyle}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Role Custom Dropdown */}
+          <div className="space-y-2.5">
+            <label className={labelStyle}>Role</label>
+            <div className="relative" ref={roleDropdownRef}>
               <button
                 type="button"
-                onClick={onClose}
-                className="h-[54px] min-w-[130px] rounded-xl border border-[#cbd5e1] bg-white px-7 text-sm font-semibold text-[#334155] transition hover:bg-[#f1f5f9] cursor-pointer"
+                onClick={() => setRoleDropdownOpen((prev) => !prev)}
+                className={`${inputStyle} flex items-center justify-between pr-12 text-left cursor-pointer ${roleDropdownOpen ? 'border-[#116dff] ring-2 ring-[#116dff]/15' : ''}`}
               >
-                Cancel
+                <span>{roleLabels[formData.role]}</span>
               </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex h-[54px] min-w-[162px] items-center justify-center gap-2 rounded-xl bg-[#116dff] hover:bg-[#3b82f6] px-7 text-sm font-bold text-white shadow-lg shadow-[#116dff]/10 transition disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-              >
-                {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-                {employeeToEdit ? 'Save Changes' : 'Register Employee'}
-              </button>
+              <ChevronDown className={`pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-[#64748B] transition-transform ${roleDropdownOpen ? 'rotate-180' : ''}`} />
+              {roleDropdownOpen && (
+                <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-lg">
+                  {(['ADVISOR', 'TECHNICIAN', 'MANAGER', 'TENANT_ADMIN'] as TenantUser['role'][]).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        handleInputChange('role', r);
+                        setRoleDropdownOpen(false);
+                      }}
+                      className={`w-full px-5 py-3 text-left text-sm transition cursor-pointer ${
+                        formData.role === r
+                          ? 'bg-[#116dff] text-white font-semibold'
+                          : 'text-[#1e293b] hover:bg-[#f1f5f9]'
+                      }`}
+                    >
+                      {roleLabels[r]}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </form>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </div>
+
+          {/* Status Custom Dropdown */}
+          <div className="space-y-2.5">
+            <label className={labelStyle}>Status</label>
+            <div className="relative" ref={statusDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setStatusDropdownOpen((prev) => !prev)}
+                className={`${inputStyle} flex items-center justify-between pr-12 text-left cursor-pointer ${statusDropdownOpen ? 'border-[#116dff] ring-2 ring-[#116dff]/15' : ''}`}
+              >
+                <span>{statusLabels[formData.status]}</span>
+              </button>
+              <ChevronDown className={`pointer-events-none absolute right-5 top-1/2 size-5 -translate-y-1/2 text-[#64748B] transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} />
+              {statusDropdownOpen && (
+                <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-xl border border-[#e2e8f0] bg-white shadow-lg">
+                  {(['ACTIVE', 'INACTIVE', 'SUSPENDED'] as TenantUser['status'][]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        handleInputChange('status', s);
+                        setStatusDropdownOpen(false);
+                      }}
+                      className={`w-full px-5 py-3 text-left text-sm transition cursor-pointer ${
+                        formData.status === s
+                          ? 'bg-[#116dff] text-white font-semibold'
+                          : 'text-[#1e293b] hover:bg-[#f1f5f9]'
+                      }`}
+                    >
+                      {statusLabels[s]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Max Concurrent Jobs — Technician only */}
+        {formData.role === 'TECHNICIAN' && (
+          <div className="space-y-2.5">
+            <label className={labelStyle}>Max Concurrent Jobs</label>
+            <input
+              type="number"
+              value={formData.maxConcurrentJobs}
+              onChange={(e) => handleInputChange('maxConcurrentJobs', e.target.value)}
+              placeholder="Enter max concurrent jobs"
+              className={inputStyle}
+            />
+          </div>
+        )}
+
+        {/* Address */}
+        <div className="space-y-2.5">
+          <label className={labelStyle}>Address <span className="text-[#64748B]">(optional)</span></label>
+          <input
+            type="text"
+            value={formData.address}
+            onChange={(e) => handleInputChange('address', e.target.value)}
+            placeholder="Enter address"
+            className={inputStyle}
+          />
+        </div>
+
+        {/* Emergency Contact */}
+        <div className="space-y-2.5">
+          <label className={labelStyle}>Emergency Contact <span className="text-[#64748B]">(optional)</span></label>
+          <input
+            type="text"
+            value={formData.emergencyContact}
+            onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
+            placeholder="Enter emergency contact number"
+            className={inputStyle}
+          />
+        </div>
+      </form>
+    </Drawer>
   );
 };

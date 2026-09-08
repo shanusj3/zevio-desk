@@ -6,7 +6,7 @@ export interface DialogProps {
   isOpen: boolean;
   onClose: () => void;
   title?: React.ReactNode;
-  headerVariant?: 'default' | 'danger' | 'info' | 'primary';
+  headerVariant?: 'default' | 'danger' | 'warning' | 'info' | 'primary';
   children: React.ReactNode;
   footer?: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
@@ -24,8 +24,9 @@ const maxWidthMap = {
 const headerVariantMap = {
   default: 'bg-white border-b border-[#e2e8f0] text-[#1e293b]',
   primary: 'bg-[#116dff] text-white',
-  danger: 'bg-[#ef4444] text-white',
-  info: 'bg-[#3b82f6] text-white',
+  danger: 'bg-[#ff6b6b] text-white',
+  warning: 'bg-[#f59e0b] text-white',
+  info: 'bg-[#116dff] text-white',
 };
 
 export const Dialog: React.FC<DialogProps> = ({

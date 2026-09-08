@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 
 export interface StatItemConfig {
   id: string;
@@ -126,8 +127,6 @@ export const AddStatsModal: React.FC<AddStatsModalProps> = ({
     }
   }, [isOpen, visibleStatIds]);
 
-  if (!isOpen) return null;
-
   const toggleStat = (id: string) => {
     if (selectedIds.includes(id) && selectedIds.length === 1) {
       return;
@@ -143,42 +142,39 @@ export const AddStatsModal: React.FC<AddStatsModalProps> = ({
     onClose();
   };
 
-  // Group by category
   const categories = Array.from(new Set(ALL_AVAILABLE_STATS.map((s) => s.category)));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg bg-white border border-[#e2e8f0] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2e8f0]">
-          <h3 className="text-lg font-bold text-[#1e293b]">Customize your key stats</h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-[#94a3b8] hover:text-[#1e293b] hover:bg-[#f1f5f9] rounded-lg transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Customize your key stats"
+      maxWidth="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleSave}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-base font-semibold text-[#1e293b]">
+          Choose the stats you want to see in your dashboard.
+        </p>
 
-        {/* Sub-instruction */}
-        <div className="px-6 pt-5 pb-3">
-          <p className="text-base font-semibold text-[#1e293b]">
-            Choose the stats you want to see in your dashboard.
-          </p>
-        </div>
-
-        {/* List Body with Scroll */}
-        <div className="max-h-[50vh] overflow-y-auto divide-y divide-[#e2e8f0]/60">
+        <div className="max-h-[50vh] overflow-y-auto divide-y divide-[#e2e8f0]/60 -mx-6">
           {categories.map((cat) => {
             const catStats = ALL_AVAILABLE_STATS.filter((s) => s.category === cat);
             return (
               <div key={cat}>
-                {/* Category Banner */}
                 <div className="bg-[#f8fafc] text-[#64748b] text-xs font-bold px-6 py-2.5 border-y border-[#e2e8f0]/60 uppercase tracking-wider">
                   {cat}
                 </div>
 
-                {/* Stat Items */}
                 <div className="px-6 py-2 divide-y divide-[#f1f5f9]">
                   {catStats.map((stat) => {
                     const isChecked = selectedIds.includes(stat.id);
@@ -208,7 +204,7 @@ export const AddStatsModal: React.FC<AddStatsModalProps> = ({
                           />
                           {isLastRemainingStat && (
                             <div className="absolute left-6 top-1/2 -translate-y-1/2 hidden group-hover/tooltip:block z-50 w-64 p-2 bg-[#1e293b] text-white text-[11px] font-medium rounded-lg shadow-xl animate-in fade-in duration-150 pointer-events-none whitespace-normal">
-                              Choose atleast one stats to show in your shope ovwerview
+                              Choose atleast one stats to show in your shop overview
                             </div>
                           )}
                         </div>
@@ -230,25 +226,7 @@ export const AddStatsModal: React.FC<AddStatsModalProps> = ({
             );
           })}
         </div>
-
-        {/* Modal Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 bg-[#f8fafc] border-t border-[#e2e8f0]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-5 py-2 text-sm font-semibold text-[#116dff] hover:bg-[#e2e8f0]/50 rounded-full transition cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-6 py-2 bg-[#116dff] hover:bg-[#0d5fd9] text-white text-sm font-semibold rounded-full shadow-sm transition cursor-pointer"
-          >
-            Save
-          </button>
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 };
