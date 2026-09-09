@@ -89,6 +89,17 @@ export const Header: React.FC<HeaderProps> = ({
     if (onGoToInboxClick) onGoToInboxClick();
   };
 
+  const getInitials = (name: string) => {
+    if (!name || !name.trim()) return 'U';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  };
+
+  const userInitials = getInitials(currentUser.name);
+
   return (
     <header className="h-14 border-b border-[#1e2535] bg-[#131720] px-6 flex items-center justify-between sticky top-0 z-50">
       {/* Left: Menu toggle */}
@@ -249,24 +260,43 @@ export const Header: React.FC<HeaderProps> = ({
               isProfileOpen ? 'bg-[#1c2333]' : 'hover:bg-[#1c2333]'
             }`}
           >
-            <div className="w-7 h-7 rounded-full bg-[#78909C] text-white font-bold text-xs flex items-center justify-center">
-              {currentUser.avatar}
+            <div className="w-7 h-7 rounded-full bg-[#116dff] text-white font-bold text-xs flex items-center justify-center shadow-xs select-none shrink-0">
+              {currentUser.avatar && currentUser.avatar.startsWith('http') ? (
+                <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full rounded-full object-cover" />
+              ) : (
+                userInitials
+              )}
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-[#64748B] group-hover:text-white transition-colors" />
           </button>
 
           {isProfileOpen && (
-            <div className="absolute right-0 top-full mt-1 w-56 bg-[#131720] border border-[#1e2535] rounded-lg shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="p-3 border-b border-[#1e2535] mb-1">
-                <p className="text-sm font-semibold text-white">{currentUser.name}</p>
-                <p className="text-xs text-[#64748B] mt-0.5">{currentUser.email}</p>
-              </div>
+            <div className="absolute right-0 top-full mt-1 w-60 bg-[#131720] border border-[#1e2535] rounded-xl shadow-2xl z-50 p-2 animate-in fade-in slide-in-from-top-2 duration-150">
               <button
                 onClick={() => {
                   setIsProfileOpen(false);
                   if (onProfileClick) onProfileClick();
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#94A3B8] hover:text-white hover:bg-[#1c2333] rounded-md transition-colors cursor-pointer"
+                className="w-full p-3 border-b border-[#1e2535] mb-1 flex items-center gap-3 text-left hover:bg-[#1c2333] rounded-lg transition-colors cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-full bg-[#116dff] text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs select-none">
+                  {currentUser.avatar && currentUser.avatar.startsWith('http') ? (
+                    <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    userInitials
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate group-hover:text-[#116dff] transition-colors">{currentUser.name}</p>
+                  <p className="text-xs text-[#64748B] truncate">{currentUser.email}</p>
+                </div>
+              </button>
+              <button
+                onClick={() => {
+                  setIsProfileOpen(false);
+                  if (onProfileClick) onProfileClick();
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[#94A3B8] hover:text-white hover:bg-[#1c2333] rounded-md transition-colors cursor-pointer font-medium"
               >
                 <User className="w-4 h-4" />
                 Profile

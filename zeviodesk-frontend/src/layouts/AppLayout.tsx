@@ -148,6 +148,10 @@ export const AppLayout: React.FC = () => {
           notifications={[]}
           onMarkNotificationRead={() => {}}
           onClearNotifications={() => {}}
+          onProfileClick={() => {
+            setActiveTab('settings');
+            navigate('/settings/profile');
+          }}
           currentUser={{
             name: currentUser?.name || '',
             email: currentUser?.email || '',

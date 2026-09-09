@@ -53,6 +53,19 @@ interface SettingCategory {
 
 const SETTING_CATEGORIES: SettingCategory[] = [
   {
+    id: 'account',
+    title: 'Account & profile',
+    items: [
+      {
+        id: 'profile-information',
+        title: 'Profile Information',
+        description: 'View your profile details and update your password.',
+        tabKey: 'profile',
+        path: '/settings/profile',
+      },
+    ],
+  },
+  {
     id: 'communications',
     title: 'Communications & notifications',
     items: [
@@ -78,7 +91,7 @@ export const SettingsView: React.FC<SettingsViewProps> = () => {
 
   useEffect(() => {
     const p = location.pathname;
-    if (p.includes('/settings/profile')) setSettingsTab('profile');
+    if (p.includes('/settings/profile') || p.includes('/profile')) setSettingsTab('profile');
     else if (p.includes('/settings/whatsapp')) setSettingsTab('whatsapp');
     else if (p.includes('/settings/channels')) setSettingsTab('channels');
     else if (p.includes('/settings/invoicing')) setSettingsTab('invoicing');
