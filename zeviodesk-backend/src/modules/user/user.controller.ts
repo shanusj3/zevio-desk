@@ -41,7 +41,7 @@ export const userController = {
       throw new ForbiddenError();
     }
     const actorRole = req.user?.role ?? "";
-    const updated = await userService.updateUser(req.params.id, req.body, actorRole);
+    const updated = await userService.updateUser(req.params.id, req.body, actorRole, req.user?.id);
     return sendSuccess(res, updated, "User updated successfully");
   }),
 

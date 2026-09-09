@@ -110,13 +110,14 @@ export const userService = {
     return formatUser(user);
   },
 
-  updateUser: async (id: string, dto: UpdateUserDto, actorRole: string) => {
+  updateUser: async (id: string, dto: UpdateUserDto, actorRole: string, actorUserId?: string) => {
     // Load the target to check their current role
     const target = await userRepository.findById(id);
     if (!target) throw new NotFoundError("User not found");
 
-    // Actors may not update users with equal or higher privilege
-    if (!canActorModifyTarget(actorRole, target.role)) {
+    // Actors may not update users with equal or higher privilege unless updating themselves
+    const isSelfUpdate = Boolean(actorUserId && actorUserId === id);
+    if (!isSelfUpdate && !canActorModifyTarget(actorRole, target.role)) {
       throw new ForbiddenError(
         `Forbidden: your role (${actorRole}) cannot modify a user with role '${target.role}'`
       );
