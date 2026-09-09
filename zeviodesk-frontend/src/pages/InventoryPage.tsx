@@ -356,13 +356,15 @@ export const InventoryPage: React.FC = () => {
                 <tr>
                   <td colSpan={7} className="py-16 text-center">
                     <div className="flex flex-col items-center justify-center space-y-3">
-                      <div className="w-16 h-16 bg-[#f1f5f9] rounded-full flex items-center justify-center border border-[#e2e8f0] shadow-inner">
-                        <Package className="w-8 h-8 text-[#116dff]" />
-                      </div>
-                      <div className="text-sm font-semibold text-[#1e293b]">
+                      <img
+                        src="/assets/no-inventory.png"
+                        alt="No inventory items"
+                        className="w-56 sm:w-64 h-auto mx-auto object-contain mb-1"
+                      />
+                      <div className="text-base font-bold text-[#1e293b]">
                         {hasActiveFilters ? 'No inventory items match your search' : 'No inventory items found'}
                       </div>
-                      <p className="text-xs text-[#64748B] max-w-[280px]">
+                      <p className="text-xs text-[#64748B] max-w-sm leading-relaxed">
                         {hasActiveFilters
                           ? 'Try adjusting or clearing your search term, category filter, or low stock alert filter.'
                           : 'Add spare parts, batteries, or screens to track stock levels dynamically.'}
@@ -376,7 +378,7 @@ export const InventoryPage: React.FC = () => {
                             setLowStockFilter(false);
                             setPage(1);
                           }}
-                          className="mt-1 px-3 py-1.5 text-xs font-semibold text-[#116dff] bg-[#eff6ff] hover:bg-[#dbeafe] rounded-lg border border-[#bfdbfe] transition cursor-pointer"
+                          className="mt-2 px-4 py-2 text-xs font-semibold text-[#116dff] bg-[#eff6ff] hover:bg-[#dbeafe] rounded-full border border-[#bfdbfe] transition cursor-pointer"
                         >
                           Clear all filters
                         </button>
