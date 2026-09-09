@@ -41,14 +41,22 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     lg: 'text-lg font-bold',
   }[size];
 
+  const isImgElement = React.isValidElement(icon) && typeof icon.type === 'string' && icon.type === 'img';
+
   return (
     <div className={`flex flex-col items-center justify-center text-center ${paddingStyles} ${className}`}>
       {icon && (
-        <div
-          className={`flex items-center justify-center rounded-2xl bg-slate-100/80 text-slate-400 mb-3 shadow-xs ${iconSizes} ${iconContainerClassName}`}
-        >
-          {icon}
-        </div>
+        isImgElement ? (
+          <div className={`mb-3 ${iconContainerClassName}`}>
+            {icon}
+          </div>
+        ) : (
+          <div
+            className={`flex items-center justify-center rounded-2xl bg-slate-100/80 text-slate-400 mb-3 shadow-xs ${iconSizes} ${iconContainerClassName}`}
+          >
+            {icon}
+          </div>
+        )
       )}
       <h3 className={`text-slate-800 tracking-tight ${titleSizes} ${titleClassName}`}>
         {title}

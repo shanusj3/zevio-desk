@@ -185,8 +185,15 @@ export const CatalogProductsPage: React.FC = () => {
         keyExtractor={(p) => p.id}
         onRowClick={(p) => navigate(`/catalog/products/${p.id}`)}
         emptyState={{
+          icon: (
+            <img
+              src="/assets/no-products.png"
+              alt="No products in catalog"
+              className="w-56 sm:w-64 h-auto mx-auto object-contain"
+            />
+          ),
           title: 'No products found',
-          description: search ? `No items matching "${search}"` : 'Click + New Product to add products.',
+          description: search ? `No items matching "${search}"` : 'Click + New Product to add products to your catalog.',
           action: (
             <button
               type="button"
